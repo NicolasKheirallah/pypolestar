@@ -86,7 +86,6 @@ QUERY_TELEMATICS_V2 = gql(
             battery {
                 vin
                 batteryChargeLevelPercentage
-                chargingStatus
                 estimatedChargingTimeToFullMinutes
                 estimatedDistanceToEmptyKm
                 timestamp { seconds nanos }

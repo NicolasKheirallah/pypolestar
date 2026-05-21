@@ -197,7 +197,7 @@ class CarBatteryData(CarBaseInformation):
     charger_connection_status: ChargingConnectionStatus | None
     charging_current_amps: int | None
     charging_power_watts: int | None
-    charging_status: ChargingStatus
+    charging_status: ChargingStatus | None
     estimated_charging_time_minutes_to_target_distance: int | None
     estimated_charging_time_to_full_minutes: int | None
     estimated_distance_to_empty_km: int | None
@@ -247,18 +247,13 @@ class CarBatteryData(CarBaseInformation):
         if not isinstance(data, dict):
             raise TypeError
 
-        charging_status = ChargingStatus.get(
-            data["chargingStatus"],
-            ChargingStatus.CHARGING_STATUS_UNSPECIFIED,
-        )
-
         return cls(
             average_energy_consumption_kwh_per_100km=None,
             battery_charge_level_percentage=get_field_name_int("batteryChargeLevelPercentage", data),
             charger_connection_status=None,
             charging_current_amps=None,
             charging_power_watts=None,
-            charging_status=charging_status,
+            charging_status=None,
             estimated_charging_time_minutes_to_target_distance=None,
             estimated_charging_time_to_full_minutes=get_field_name_int("estimatedChargingTimeToFullMinutes", data),
             estimated_distance_to_empty_km=get_field_name_int("estimatedDistanceToEmptyKm", data),
