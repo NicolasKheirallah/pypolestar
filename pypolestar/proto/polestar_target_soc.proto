@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package pccs.chronos.messages.targetsoc.v1;
 
-import "chronos_request.proto";
+import "polestar_chronos_request.proto";
 
 // Reconstructed from Polestar Android APK v5.5.0 decompilation
 

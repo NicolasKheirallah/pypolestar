@@ -27,7 +27,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pypolestar.auth import PolestarAuth  # noqa: E402
 from pypolestar.grpc_client import PolestarGrpcClient  # noqa: E402
-from pypolestar.proto import battery_service_pb2, chronos_request_pb2, target_soc_pb2  # noqa: E402
+from pypolestar.proto import (  # noqa: E402
+    polestar_battery_service_pb2,
+    polestar_chronos_request_pb2,
+    polestar_target_soc_pb2,
+)
 
 # Fixed anonymized values used in place of real identifiers.
 ANON_VIN = "YSMYKEAE7RB000000"
@@ -39,7 +43,7 @@ ANON_TIMESTAMP_SECONDS = 1704067200
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
-def anonymize_battery_response(response: battery_service_pb2.GetBatteryResponse) -> None:
+def anonymize_battery_response(response: polestar_battery_service_pb2.GetBatteryResponse) -> None:
     """Strip identifiers from a GetBatteryResponse in place."""
     response.id = ANON_ID
     response.vin = ANON_VIN
@@ -48,7 +52,7 @@ def anonymize_battery_response(response: battery_service_pb2.GetBatteryResponse)
         response.battery.timestamp.nanos = 0
 
 
-def anonymize_target_soc_response(response: target_soc_pb2.GetTargetSocResponse) -> None:
+def anonymize_target_soc_response(response: polestar_target_soc_pb2.GetTargetSocResponse) -> None:
     """Strip identifiers from a GetTargetSocResponse in place."""
     response.id = ANON_ID
     response.vin = ANON_VIN
@@ -60,7 +64,7 @@ def anonymize_target_soc_response(response: target_soc_pb2.GetTargetSocResponse)
         response.updated_at = ANON_TIMESTAMP_SECONDS
 
 
-def _anonymize_target_soc(ts: target_soc_pb2.TargetSoc) -> None:
+def _anonymize_target_soc(ts: polestar_target_soc_pb2.TargetSoc) -> None:
     ts.id = ANON_ID
     ts.source = ANON_SOURCE
     ts.updated_at = ANON_TIMESTAMP_SECONDS
@@ -107,24 +111,24 @@ async def capture() -> None:
 
 async def _get_latest_battery(
     client: PolestarGrpcClient, vin: str, access_token: str
-) -> battery_service_pb2.GetBatteryResponse:
-    request = battery_service_pb2.GetBatteryRequest(id=str(uuid.uuid4()), vin=vin)
+) -> polestar_battery_service_pb2.GetBatteryResponse:
+    request = polestar_battery_service_pb2.GetBatteryRequest(id=str(uuid.uuid4()), vin=vin)
     return await client.c3_channel.unary_unary(
         "/services.vehiclestates.battery.BatteryService/GetLatestBattery",
-        request_serializer=battery_service_pb2.GetBatteryRequest.SerializeToString,
-        response_deserializer=battery_service_pb2.GetBatteryResponse.FromString,
+        request_serializer=polestar_battery_service_pb2.GetBatteryRequest.SerializeToString,
+        response_deserializer=polestar_battery_service_pb2.GetBatteryResponse.FromString,
     )(request, metadata=client._metadata(access_token, vin), timeout=30)
 
 
 async def _get_target_soc(
     client: PolestarGrpcClient, vin: str, access_token: str
-) -> target_soc_pb2.GetTargetSocResponse:
-    chronos_req = chronos_request_pb2.ChronosRequest(id=str(uuid.uuid4()), vin=vin, source="mobile")
-    request = target_soc_pb2.GetTargetSocRequest(request=chronos_req)
+) -> polestar_target_soc_pb2.GetTargetSocResponse:
+    chronos_req = polestar_chronos_request_pb2.ChronosRequest(id=str(uuid.uuid4()), vin=vin, source="mobile")
+    request = polestar_target_soc_pb2.GetTargetSocRequest(request=chronos_req)
     call = client.pccs_channel.unary_stream(
         "/pccs.chronos.services.v1.TargetSocService/GetTargetSoc",
-        request_serializer=target_soc_pb2.GetTargetSocRequest.SerializeToString,
-        response_deserializer=target_soc_pb2.GetTargetSocResponse.FromString,
+        request_serializer=polestar_target_soc_pb2.GetTargetSocRequest.SerializeToString,
+        response_deserializer=polestar_target_soc_pb2.GetTargetSocResponse.FromString,
     )(request, metadata=client._metadata(access_token, vin), timeout=30)
     async for msg in call:
         return msg

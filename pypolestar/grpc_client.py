@@ -25,7 +25,12 @@ from .grpc_models import (
     GrpcBatteryData,
     GrpcTargetSocData,
 )
-from .proto import battery_pb2, battery_service_pb2, chronos_request_pb2, target_soc_pb2
+from .proto import (
+    polestar_battery_pb2,
+    polestar_battery_service_pb2,
+    polestar_chronos_request_pb2,
+    polestar_target_soc_pb2,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,22 +43,22 @@ GRPC_TIMEOUT = 30
 
 
 def _connection_status(value: int) -> ChargingConnectionStatus:
-    name = battery_pb2.ChargerConnectionStatus.Name(value)
+    name = polestar_battery_pb2.ChargerConnectionStatus.Name(value)
     return ChargingConnectionStatus.get(name, ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_UNSPECIFIED)
 
 
 def _charging_status(value: int) -> ChargingStatus:
-    name = battery_pb2.ChargingStatus.Name(value)
+    name = polestar_battery_pb2.ChargingStatus.Name(value)
     return ChargingStatus.get(name, ChargingStatus.CHARGING_STATUS_UNSPECIFIED)
 
 
 def _charging_type(value: int) -> ChargingType:
-    name = battery_pb2.ChargingType.Name(value)
+    name = polestar_battery_pb2.ChargingType.Name(value)
     return ChargingType.get(name, ChargingType.CHARGING_TYPE_UNSPECIFIED)
 
 
 def _target_soc_setting_type(value: int) -> ChargeTargetLevelSettingType:
-    name = target_soc_pb2.ChargeTargetLevelSettingType.Name(value)
+    name = polestar_target_soc_pb2.ChargeTargetLevelSettingType.Name(value)
     return ChargeTargetLevelSettingType.get(
         name, ChargeTargetLevelSettingType.CHARGE_TARGET_LEVEL_SETTING_TYPE_UNSPECIFIED
     )
@@ -116,7 +121,7 @@ class PolestarGrpcClient:
         if not self.c3_channel:
             raise RuntimeError("gRPC C3 channel not connected")
 
-        request = battery_service_pb2.GetBatteryRequest(
+        request = polestar_battery_service_pb2.GetBatteryRequest(
             id=str(uuid.uuid4()),
             vin=vin,
         )
@@ -125,8 +130,8 @@ class PolestarGrpcClient:
             # Battery service lives on C3 (cnepmob.volvocars.com) with shorter service path
             response = await self.c3_channel.unary_unary(
                 "/services.vehiclestates.battery.BatteryService/GetLatestBattery",
-                request_serializer=battery_service_pb2.GetBatteryRequest.SerializeToString,
-                response_deserializer=battery_service_pb2.GetBatteryResponse.FromString,
+                request_serializer=polestar_battery_service_pb2.GetBatteryRequest.SerializeToString,
+                response_deserializer=polestar_battery_service_pb2.GetBatteryResponse.FromString,
             )(request, metadata=self._metadata(access_token, vin), timeout=GRPC_TIMEOUT)
 
             self.logger.debug("gRPC GetLatestBattery response: %s", response)
@@ -146,19 +151,19 @@ class PolestarGrpcClient:
         if not self.pccs_channel:
             raise RuntimeError("gRPC PCCS channel not connected")
 
-        chronos_req = chronos_request_pb2.ChronosRequest(
+        chronos_req = polestar_chronos_request_pb2.ChronosRequest(
             id=str(uuid.uuid4()),
             vin=vin,
             source="mobile",
         )
-        request = target_soc_pb2.GetTargetSocRequest(request=chronos_req)
+        request = polestar_target_soc_pb2.GetTargetSocRequest(request=chronos_req)
 
         try:
             # TargetSocService.GetTargetSoc is server-streaming; read first response
             call = self.pccs_channel.unary_stream(
                 "/pccs.chronos.services.v1.TargetSocService/GetTargetSoc",
-                request_serializer=target_soc_pb2.GetTargetSocRequest.SerializeToString,
-                response_deserializer=target_soc_pb2.GetTargetSocResponse.FromString,
+                request_serializer=polestar_target_soc_pb2.GetTargetSocRequest.SerializeToString,
+                response_deserializer=polestar_target_soc_pb2.GetTargetSocResponse.FromString,
             )(request, metadata=self._metadata(access_token, vin), timeout=GRPC_TIMEOUT)
 
             response = None
@@ -179,7 +184,7 @@ class PolestarGrpcClient:
             raise
 
 
-def _parse_battery(b: battery_pb2.Battery) -> GrpcBatteryData:
+def _parse_battery(b: polestar_battery_pb2.Battery) -> GrpcBatteryData:
     """Parse a Battery protobuf message into GrpcBatteryData."""
     ts: datetime | None = None
     if b.HasField("timestamp"):
@@ -202,7 +207,7 @@ def _parse_battery(b: battery_pb2.Battery) -> GrpcBatteryData:
     )
 
 
-def _parse_target_soc(response: target_soc_pb2.GetTargetSocResponse) -> GrpcTargetSocData:
+def _parse_target_soc(response: polestar_target_soc_pb2.GetTargetSocResponse) -> GrpcTargetSocData:
     """Parse a GetTargetSocResponse into GrpcTargetSocData."""
     target_level: int | None = None
     target_type = ChargeTargetLevelSettingType.CHARGE_TARGET_LEVEL_SETTING_TYPE_UNSPECIFIED

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package pccs.vehiclestates.entities.battery.v1;
 
-import "common.proto";
+import "polestar_common.proto";
 
 // Reconstructed from Polestar Android APK v5.5.0 decompilation
 // pccs.vehiclestates.entities.battery.v1.Battery
