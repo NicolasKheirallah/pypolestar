@@ -19,7 +19,7 @@ from pypolestar.grpc_models import (
     GrpcBatteryData,
     GrpcTargetSocData,
 )
-from pypolestar.proto import battery_pb2, battery_service_pb2, target_soc_pb2
+from pypolestar.proto import polestar_battery_pb2, polestar_battery_service_pb2, polestar_target_soc_pb2
 
 DATADIR = Path(__file__).parent.resolve() / "data"
 
@@ -29,14 +29,14 @@ ANON_ID = "00000000-0000-0000-0000-000000000000"
 ANON_TIMESTAMP = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
 
-def _load_battery_fixture() -> battery_service_pb2.GetBatteryResponse:
+def _load_battery_fixture() -> polestar_battery_service_pb2.GetBatteryResponse:
     raw = (DATADIR / "grpc_battery_response.bin").read_bytes()
-    return battery_service_pb2.GetBatteryResponse.FromString(raw)
+    return polestar_battery_service_pb2.GetBatteryResponse.FromString(raw)
 
 
-def _load_target_soc_fixture() -> target_soc_pb2.GetTargetSocResponse:
+def _load_target_soc_fixture() -> polestar_target_soc_pb2.GetTargetSocResponse:
     raw = (DATADIR / "grpc_target_soc_response.bin").read_bytes()
-    return target_soc_pb2.GetTargetSocResponse.FromString(raw)
+    return polestar_target_soc_pb2.GetTargetSocResponse.FromString(raw)
 
 
 def test_battery_fixture_envelope():
@@ -81,10 +81,10 @@ def test_parse_target_soc_fixture():
 
 def test_parse_battery_synthetic_dc_charging():
     """Exercise fields the captured fixture didn't populate (DC charging, power/amps/volts)."""
-    msg = battery_pb2.Battery(
-        charger_connection_status=battery_pb2.CHARGER_CONNECTION_STATUS_CONNECTED,
-        charging_status=battery_pb2.CHARGING_STATUS_CHARGING,
-        charging_type=battery_pb2.CHARGING_TYPE_DC,
+    msg = polestar_battery_pb2.Battery(
+        charger_connection_status=polestar_battery_pb2.CHARGER_CONNECTION_STATUS_CONNECTED,
+        charging_status=polestar_battery_pb2.CHARGING_STATUS_CHARGING,
+        charging_type=polestar_battery_pb2.CHARGING_TYPE_DC,
         battery_charge_level_percentage=45.5,
         charging_power_watts=150_000,
         charging_current_amps=375,
@@ -92,7 +92,7 @@ def test_parse_battery_synthetic_dc_charging():
         estimated_charging_time_minutes_to_target_distance=15,
         estimated_charging_time_minutes_to_minimum_soc=5,
     )
-    data = _parse_battery(battery_pb2.Battery.FromString(msg.SerializeToString()))
+    data = _parse_battery(polestar_battery_pb2.Battery.FromString(msg.SerializeToString()))
 
     assert data.charger_connection_status == ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_CONNECTED
     assert data.charging_status == ChargingStatus.CHARGING_STATUS_CHARGING
@@ -103,7 +103,7 @@ def test_parse_battery_synthetic_dc_charging():
 
 
 def test_parse_battery_unspecified_enums_default_to_unspecified():
-    data = _parse_battery(battery_pb2.Battery.FromString(battery_pb2.Battery().SerializeToString()))
+    data = _parse_battery(polestar_battery_pb2.Battery.FromString(polestar_battery_pb2.Battery().SerializeToString()))
 
     assert data.charger_connection_status == ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_UNSPECIFIED
     assert data.charging_status == ChargingStatus.CHARGING_STATUS_UNSPECIFIED
@@ -115,10 +115,10 @@ def test_all_charging_status_values_are_mapped():
     # Every ChargingStatus enum value in the proto must have a corresponding
     # ChargingStatus member — otherwise we'd silently fall back to UNSPECIFIED
     # and mask real car state.
-    for number in battery_pb2.ChargingStatus.values():
-        msg = battery_pb2.Battery(charging_status=number)
-        parsed = _parse_battery(battery_pb2.Battery.FromString(msg.SerializeToString()))
-        expected_name = battery_pb2.ChargingStatus.Name(number)
+    for number in polestar_battery_pb2.ChargingStatus.values():
+        msg = polestar_battery_pb2.Battery(charging_status=number)
+        parsed = _parse_battery(polestar_battery_pb2.Battery.FromString(msg.SerializeToString()))
+        expected_name = polestar_battery_pb2.ChargingStatus.Name(number)
         assert parsed.charging_status.name == expected_name, (
             f"ChargingStatus {expected_name} not mapped in grpc_models.ChargingStatus"
         )
@@ -127,28 +127,28 @@ def test_all_charging_status_values_are_mapped():
 def test_parse_target_soc_preserves_zero_level():
     # Regression: an earlier version used `x or None` which would turn a legitimate
     # 0 into None. Direct assignment means 0 stays 0.
-    response = target_soc_pb2.GetTargetSocResponse(
-        target_soc=target_soc_pb2.TargetSoc(
+    response = polestar_target_soc_pb2.GetTargetSocResponse(
+        target_soc=polestar_target_soc_pb2.TargetSoc(
             battery_charge_target_level=0,
-            charge_target_level_setting_type=target_soc_pb2.CUSTOM,
+            charge_target_level_setting_type=polestar_target_soc_pb2.CUSTOM,
         ),
     )
-    data = _parse_target_soc(target_soc_pb2.GetTargetSocResponse.FromString(response.SerializeToString()))
+    data = _parse_target_soc(polestar_target_soc_pb2.GetTargetSocResponse.FromString(response.SerializeToString()))
     assert data.battery_charge_target_level == 0
 
 
 def test_parse_target_soc_with_pending():
-    response = target_soc_pb2.GetTargetSocResponse(
-        target_soc=target_soc_pb2.TargetSoc(
+    response = polestar_target_soc_pb2.GetTargetSocResponse(
+        target_soc=polestar_target_soc_pb2.TargetSoc(
             battery_charge_target_level=90,
-            charge_target_level_setting_type=target_soc_pb2.DAILY,
+            charge_target_level_setting_type=polestar_target_soc_pb2.DAILY,
         ),
-        pending_target_soc=target_soc_pb2.TargetSoc(
+        pending_target_soc=polestar_target_soc_pb2.TargetSoc(
             battery_charge_target_level=100,
-            charge_target_level_setting_type=target_soc_pb2.LONG_TRIP,
+            charge_target_level_setting_type=polestar_target_soc_pb2.LONG_TRIP,
         ),
     )
-    data = _parse_target_soc(target_soc_pb2.GetTargetSocResponse.FromString(response.SerializeToString()))
+    data = _parse_target_soc(polestar_target_soc_pb2.GetTargetSocResponse.FromString(response.SerializeToString()))
 
     assert data.battery_charge_target_level == 90
     assert data.charge_target_level_setting_type == ChargeTargetLevelSettingType.DAILY
@@ -157,7 +157,9 @@ def test_parse_target_soc_with_pending():
 
 
 def test_parse_target_soc_empty_response():
-    response = target_soc_pb2.GetTargetSocResponse.FromString(target_soc_pb2.GetTargetSocResponse().SerializeToString())
+    response = polestar_target_soc_pb2.GetTargetSocResponse.FromString(
+        polestar_target_soc_pb2.GetTargetSocResponse().SerializeToString()
+    )
     data = _parse_target_soc(response)
 
     assert data.battery_charge_target_level is None

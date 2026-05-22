@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package pccs.chronos.messages.common.v1;
 
-import "chronos_common.proto";
+import "polestar_chronos_common.proto";
 
 message ChronosRequest {
   string id = 1;
