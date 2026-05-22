@@ -198,7 +198,7 @@ def test_telematics_information_data_polestar3(polestar3_test_data):
     assert data.battery.charger_connection_status is None
     assert data.battery.charging_current_amps is None
     assert data.battery.charging_power_watts is None
-    assert data.battery.charging_status == ChargingStatus.CHARGING_STATUS_IDLE
+    assert data.battery.charging_status is None
     assert data.battery.estimated_charging_time_minutes_to_target_distance is None
     assert data.battery.estimated_charging_time_to_full_minutes == 0
     assert data.battery.estimated_distance_to_empty_km == 390
