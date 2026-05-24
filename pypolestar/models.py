@@ -247,13 +247,22 @@ class CarBatteryData(CarBaseInformation):
         if not isinstance(data, dict):
             raise TypeError
 
+        charging_status: ChargingStatus | None
+        match data.get("chargingStatusV2"):
+            case "CHARGING_STATUS_V2_IDLE":
+                charging_status = ChargingStatus.CHARGING_STATUS_IDLE
+            case "CHARGING_STATUS_V2_CHARGING":
+                charging_status = ChargingStatus.CHARGING_STATUS_CHARGING
+            case _:
+                charging_status = None
+
         return cls(
             average_energy_consumption_kwh_per_100km=None,
             battery_charge_level_percentage=get_field_name_int("batteryChargeLevelPercentage", data),
             charger_connection_status=None,
             charging_current_amps=None,
             charging_power_watts=None,
-            charging_status=None,
+            charging_status=charging_status,
             estimated_charging_time_minutes_to_target_distance=None,
             estimated_charging_time_to_full_minutes=get_field_name_int("estimatedChargingTimeToFullMinutes", data),
             estimated_distance_to_empty_km=get_field_name_int("estimatedDistanceToEmptyKm", data),

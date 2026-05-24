@@ -85,6 +85,7 @@ QUERY_TELEMATICS_V2 = gql(
             }
             battery {
                 vin
+                chargingStatusV2
                 batteryChargeLevelPercentage
                 estimatedChargingTimeToFullMinutes
                 estimatedDistanceToEmptyKm
