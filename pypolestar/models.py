@@ -247,14 +247,14 @@ class CarBatteryData(CarBaseInformation):
         if not isinstance(data, dict):
             raise TypeError
 
-        charging_status: ChargingStatus
-        match data["chargingStatusV2"]:
+        charging_status: ChargingStatus | None
+        match data.get("chargingStatusV2"):
             case "CHARGING_STATUS_V2_IDLE":
                 charging_status = ChargingStatus.CHARGING_STATUS_IDLE
             case "CHARGING_STATUS_V2_CHARGING":
                 charging_status = ChargingStatus.CHARGING_STATUS_CHARGING
             case _:
-                charging_status = ChargingStatus.CHARGING_STATUS_UNSPECIFIED
+                charging_status = None
 
         return cls(
             average_energy_consumption_kwh_per_100km=None,
