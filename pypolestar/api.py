@@ -288,14 +288,14 @@ class PolestarApi:
 
         try:
             battery = await self.grpc_client.get_battery(vin, self.auth.access_token)
-            self.data_by_vin[vin]["grpc_battery"] = battery
+            self.data_by_vin[vin][GRPC_BATTERY_DATA] = battery
             self.logger.debug("gRPC battery data: %s", battery)
         except Exception as exc:
             self.logger.warning("gRPC battery fetch failed: %s", exc)
 
         try:
             target_soc = await self.grpc_client.get_target_soc(vin, self.auth.access_token)
-            self.data_by_vin[vin]["grpc_target_soc"] = target_soc
+            self.data_by_vin[vin][GRPC_TARGET_SOC_DATA] = target_soc
             self.logger.debug("gRPC target SOC data: %s", target_soc)
         except Exception as exc:
             self.logger.warning("gRPC target SOC fetch failed: %s", exc)
