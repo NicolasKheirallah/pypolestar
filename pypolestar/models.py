@@ -34,6 +34,7 @@ class ChargingStatus(StrEnumOptional):
     CHARGING_STATUS_DISCHARGING = "Discharging"
     CHARGING_STATUS_ERROR = "Error"
     CHARGING_STATUS_SMART_CHARGING = "Smart Charging"
+    CHARGING_STATUS_SMART_CHARGING_PAUSED = "Smart Charging Paused"
 
 
 class BrakeFluidLevelWarning(StrEnumOptional):
