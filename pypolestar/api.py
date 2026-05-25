@@ -19,6 +19,8 @@ from .const import (
     API_MYSTAR_V2_URL,
     CAR_IMAGES_DATA,
     CAR_INFO_DATA,
+    GRPC_BATTERY_DATA,
+    GRPC_TARGET_SOC_DATA,
     TELEMATICS_DATA,
 )
 from .exceptions import (
@@ -202,12 +204,12 @@ class PolestarApi:
     def get_grpc_battery(self, vin: str) -> GrpcBatteryData | None:
         """Get battery data from gRPC API (includes charger connection status, power, etc.)."""
         self._ensure_data_for_vin(vin)
-        return self.data_by_vin[vin].get("grpc_battery")
+        return self.data_by_vin[vin].get(GRPC_BATTERY_DATA)
 
     def get_grpc_target_soc(self, vin: str) -> GrpcTargetSocData | None:
         """Get target SOC (charge limit) from gRPC API."""
         self._ensure_data_for_vin(vin)
-        return self.data_by_vin[vin].get("grpc_target_soc")
+        return self.data_by_vin[vin].get(GRPC_TARGET_SOC_DATA)
 
     async def update_latest_data(
         self,

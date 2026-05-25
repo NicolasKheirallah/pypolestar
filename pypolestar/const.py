@@ -6,6 +6,9 @@ BATTERY_DATA = "getBatteryData"
 TELEMATICS_DATA = "carTelematicsV2"
 CAR_IMAGES_DATA = "getCarImages"
 
+GRPC_BATTERY_DATA = "grpc_battery"
+GRPC_TARGET_SOC_DATA = "grpc_target_soc"
+
 HTTPX_TIMEOUT = 30
 TOKEN_REFRESH_WINDOW_MIN = 300
 
