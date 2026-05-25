@@ -8,6 +8,7 @@ from .models import ChargingConnectionStatus, ChargingStatus, StrEnumOptional
 
 class ChargingType(StrEnumOptional):
     CHARGING_TYPE_UNSPECIFIED = "Unspecified"
+    CHARGING_TYPE_NONE = "None"
     CHARGING_TYPE_AC = "AC"
     CHARGING_TYPE_DC = "DC"
     CHARGING_TYPE_WIRELESS = "Wireless"

@@ -28,6 +28,7 @@ enum ChargingStatus {
 
 enum ChargingType {
   CHARGING_TYPE_UNSPECIFIED = 0;
+  CHARGING_TYPE_NONE = 1;
   CHARGING_TYPE_AC = 2;
   CHARGING_TYPE_DC = 3;
   CHARGING_TYPE_WIRELESS = 4;

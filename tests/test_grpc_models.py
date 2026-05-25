@@ -53,7 +53,7 @@ def test_parse_battery_fixture():
     assert isinstance(data, GrpcBatteryData)
     assert data.charger_connection_status == ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_CONNECTED
     assert data.charging_status == ChargingStatus.CHARGING_STATUS_IDLE
-    assert data.charging_type == ChargingType.CHARGING_TYPE_AC
+    assert data.charging_type == ChargingType.CHARGING_TYPE_NONE
     assert data.battery_charge_level_percentage == 26.0
     assert data.estimated_distance_to_empty_km == 111
     assert data.estimated_charging_time_to_full_minutes == 1
