@@ -136,10 +136,10 @@ def test_car_battery_data_rate():
         _received_timestamp=datetime.now(tz=timezone.utc),
         average_energy_consumption_kwh_per_100km=None,
         battery_charge_level_percentage=55,
-        charger_connection_status=ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_DISCONNECTED,
-        charging_current_amps=0,
-        charging_power_watts=0,
-        charging_status=ChargingStatus.CHARGING_STATUS_IDLE,
+        charger_connection_status=ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_CONNECTED,
+        charging_current_amps=15,
+        charging_power_watts=11000,
+        charging_status=ChargingStatus.CHARGING_STATUS_CHARGING,
         estimated_charging_time_minutes_to_target_distance=None,
         estimated_charging_time_to_full_minutes=60,
         estimated_distance_to_empty_km=300,
@@ -151,6 +151,27 @@ def test_car_battery_data_rate():
     fully_charged_at = datetime.now(tz=timezone.utc) + timedelta(minutes=59)
     assert data.estimated_fully_charged is not None
     assert data.estimated_fully_charged > fully_charged_at
+
+
+def test_estimated_fully_charged_requires_charging():
+    def battery(charging_status):
+        return CarBatteryData(
+            _received_timestamp=datetime.now(tz=timezone.utc),
+            average_energy_consumption_kwh_per_100km=None,
+            battery_charge_level_percentage=55,
+            charger_connection_status=ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_CONNECTED,
+            charging_current_amps=15,
+            charging_power_watts=11000,
+            charging_status=charging_status,
+            estimated_charging_time_minutes_to_target_distance=None,
+            estimated_charging_time_to_full_minutes=60,
+            estimated_distance_to_empty_km=300,
+            event_updated_timestamp=None,
+        )
+
+    assert battery(ChargingStatus.CHARGING_STATUS_CHARGING).estimated_fully_charged is not None
+    assert battery(ChargingStatus.CHARGING_STATUS_IDLE).estimated_fully_charged is None
+    assert battery(None).estimated_fully_charged is None
 
 
 def test_car_battery_data_invalid():
