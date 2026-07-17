@@ -233,7 +233,8 @@ class CarBatteryData(CarBaseInformation):
         - Battery is already fully charged
         """
         if (
-            self.estimated_charging_time_to_full_minutes
+            self.charging_status == ChargingStatus.CHARGING_STATUS_CHARGING
+            and self.estimated_charging_time_to_full_minutes
             and self.estimated_charging_time_to_full_minutes > 0
             and self.battery_charge_level_percentage is not None
             and self.battery_charge_level_percentage < 100
