@@ -38,7 +38,7 @@ from .graphql import (
 )
 from .grpc_client import PolestarGrpcClient
 from .grpc_models import GrpcBatteryData, GrpcTargetSocData
-from .models import CarImagesData, CarInformationData, CarTelematicsData
+from .models import CarData, CarImagesData, CarInformationData, CarTelematicsData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -137,6 +137,16 @@ class PolestarApi:
     def get_available_vins(self) -> list[str]:
         """Get list of all available VINs"""
         return list(self.available_vins)
+
+    def get_data(self, vin: str) -> CarData:
+        """Get the internal data dictionary"""
+        return CarData(
+            car_info=self.get_car_information(vin),
+            car_telematics=self.get_car_telematics(vin),
+            car_images=self.get_car_images(vin),
+            grpc_battery=self.get_grpc_battery(vin),
+            grpc_target_soc=self.get_grpc_target_soc(vin),
+        )
 
     def get_car_information(self, vin: str) -> CarInformationData | None:
         """
