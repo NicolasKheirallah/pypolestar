@@ -328,11 +328,16 @@ class CarImagesData(CarBaseInformation):
         )
 
 
-class CarData(BaseModel):
-    car_info: CarInformationData | None = None
+class CarDataCollection(BaseModel):
+    """Collection of car data from GraphQL and gRPC APIs"""
+
+    # from GraphQL API
+    car_information: CarInformationData | None = None
     car_telematics: CarTelematicsData | None = None
     car_images: CarImagesData | None = None
-    grpc_battery: GrpcBatteryData | None = None
-    grpc_target_soc: GrpcTargetSocData | None = None
+
+    # from gRPC API
+    battery_data: GrpcBatteryData | None = None
+    target_soc: GrpcTargetSocData | None = None
 
     model_config = ConfigDict(frozen=True)
