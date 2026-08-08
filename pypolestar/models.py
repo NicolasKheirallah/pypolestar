@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from functools import cached_property
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from .enum import (
     BrakeFluidLevelWarning,
@@ -34,14 +34,9 @@ TORQUE_PATTERN = re.compile(r"(\d+)(?:\s*Nm|\s*N·m|\s*N⋅m)", re.IGNORECASE)
 
 
 class CarBaseInformation(BaseModel):
-    received_timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    _received_timestamp: datetime = PrivateAttr(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     model_config = ConfigDict(frozen=True)
-
-    @property
-    def _received_timestamp(self) -> datetime:
-        """Return the timestamp when the data was received."""
-        return self.received_timestamp
 
 
 class CarBatteryInformationData(BaseModel):
