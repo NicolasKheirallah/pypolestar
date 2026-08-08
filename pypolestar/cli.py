@@ -12,7 +12,12 @@ from .exceptions import PolestarAuthException
 def dump_api_data(api: PolestarApi, vin: str) -> None:
     filename = f"{vin}.json"
     with open(filename, "w") as fp:
-        json.dump(api.get_data(vin).model_dump(mode="json"), fp, indent=4, sort_keys=True)
+        json.dump(
+            api.get_data(vin).model_dump(mode="json", exclude_none=True),
+            fp,
+            indent=4,
+            sort_keys=True,
+        )
     logging.info("Wrote vehicle data to %s", filename)
 
 
