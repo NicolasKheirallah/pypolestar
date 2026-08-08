@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .const import (
     HTTPX_TIMEOUT,
@@ -32,6 +32,8 @@ class OidcConfiguration(BaseModel):
     issuer: str
     token_endpoint: str
     authorization_endpoint: str
+
+    model_config = ConfigDict(frozen=True)
 
 
 class PolestarAuth:
