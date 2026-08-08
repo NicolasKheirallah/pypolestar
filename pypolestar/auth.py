@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
+from json import JSONDecodeError
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -106,7 +107,7 @@ class PolestarAuth:
             ) from exc
         try:
             self.oidc_configuration = OidcConfiguration.model_validate(result.json())
-        except ValidationError as exc:
+        except (ValidationError, JSONDecodeError) as exc:
             raise PolestarAuthException("Invalid OIDC configuration") from exc
 
     def need_token_refresh(self) -> bool:
