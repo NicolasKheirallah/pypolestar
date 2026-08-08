@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .const import (
     HTTPX_TIMEOUT,
@@ -104,7 +104,10 @@ class PolestarAuth:
             raise PolestarAuthUnavailable(
                 message="Unable to get OIDC configuration", error_code=exc.response.status_code
             ) from exc
-        self.oidc_configuration = OidcConfiguration.model_validate(result.json())
+        try:
+            self.oidc_configuration = OidcConfiguration.model_validate(result.json())
+        except ValidationError as exc:
+            raise PolestarAuthException("Invalid OIDC configuration") from exc
 
     def need_token_refresh(self) -> bool:
         """Return True if token needs refresh"""
