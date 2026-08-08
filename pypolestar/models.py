@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from functools import cached_property
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .enum import (
     BrakeFluidLevelWarning,
@@ -34,9 +34,14 @@ TORQUE_PATTERN = re.compile(r"(\d+)(?:\s*Nm|\s*N·m|\s*N⋅m)", re.IGNORECASE)
 
 
 class CarBaseInformation(BaseModel):
-    _received_timestamp: datetime
+    received_timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     model_config = ConfigDict(frozen=True)
+
+    @property
+    def _received_timestamp(self) -> datetime:
+        """Return the timestamp when the data was received."""
+        return self.received_timestamp
 
 
 class CarBatteryInformationData(BaseModel):
@@ -115,7 +120,6 @@ class CarInformationData(CarBaseInformation):
             model_name=model_name,
             model_year=get_field_name_str("modelYear", data),
             image_url=None,
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
@@ -137,7 +141,6 @@ class CarOdometerData(CarBaseInformation):
             trip_meter_automatic_km=None,
             trip_meter_manual_km=None,
             event_updated_timestamp=get_field_name_timestamp("timestamp/seconds", data),
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
@@ -218,7 +221,6 @@ class CarBatteryData(CarBaseInformation):
             estimated_charging_time_to_full_minutes=get_field_name_int("estimatedChargingTimeToFullMinutes", data),
             estimated_distance_to_empty_km=get_field_name_int("estimatedDistanceToEmptyKm", data),
             event_updated_timestamp=get_field_name_timestamp("timestamp/seconds", data),
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
@@ -261,7 +263,6 @@ class CarHealthData(CarBaseInformation):
             oil_level_warning=oil_level_warning,
             service_warning=service_warning,
             event_updated_timestamp=get_field_name_timestamp("timestamp/seconds", data),
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
@@ -290,7 +291,6 @@ class CarTelematicsData(CarBaseInformation):
             health=(CarHealthData.from_dict(health) if isinstance(health, dict) else None),
             battery=(CarBatteryData.from_dict(battery) if isinstance(battery, dict) else None),
             odometer=(CarOdometerData.from_dict(odometer) if isinstance(odometer, dict) else None),
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
@@ -324,7 +324,6 @@ class CarImagesData(CarBaseInformation):
             opaque=[
                 CarImage(url=img["url"], angle=img["angle"]) for img in data.get("opaque", []) if isinstance(img, dict)
             ],
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
