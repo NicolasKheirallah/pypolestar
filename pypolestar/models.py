@@ -34,9 +34,15 @@ TORQUE_PATTERN = re.compile(r"(\d+)(?:\s*Nm|\s*N·m|\s*N⋅m)", re.IGNORECASE)
 
 
 class CarBaseInformation(BaseModel):
+    """Base class for car information data models."""
+
     _received_timestamp: datetime = PrivateAttr(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     model_config = ConfigDict(frozen=True)
+
+    def get_received_timestamp(self) -> datetime:
+        """Return the timestamp when the data was received."""
+        return self._received_timestamp
 
 
 class CarBatteryInformationData(BaseModel):

@@ -1,14 +1,22 @@
 """Data models for the Polestar gRPC API."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from .enum import ChargeTargetLevelSettingType, ChargingConnectionStatus, ChargingStatus, ChargingType
 
 
 class GrpcBaseModel(BaseModel):
+    """Base class for gRPC data models."""
+
+    _received_timestamp: datetime = PrivateAttr(default_factory=lambda: datetime.now(tz=timezone.utc))
+
     model_config = ConfigDict(frozen=True)
+
+    def get_received_timestamp(self) -> datetime:
+        """Return the timestamp when the data was received."""
+        return self._received_timestamp
 
 
 class GrpcBatteryData(GrpcBaseModel):
