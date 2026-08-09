@@ -50,7 +50,7 @@ class CarBatteryInformationData(BaseModel):
     @classmethod
     def from_battery_str(cls, battery_information: str) -> Self:
         if match := CAPACITY_PATTERN.search(battery_information):
-            capacity = int(match.group(1))
+            capacity = int(float(match.group(1)))
         else:
             capacity = None
 
