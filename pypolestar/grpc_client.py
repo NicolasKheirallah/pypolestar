@@ -95,10 +95,6 @@ class PolestarGrpcClient:
         """Connect to both gRPC servers."""
         creds = grpc.ssl_channel_credentials()
 
-        # Re-evaluate per-vehicle support on every (re)connect
-        self.unsupported_battery.clear()
-        self.unsupported_target_soc.clear()
-
         # Discover C3 gRPC host dynamically
         c3_host, c3_port = await self._discover_c3_host()
         c3_target = f"{c3_host}:{c3_port}"
@@ -108,6 +104,12 @@ class PolestarGrpcClient:
         pccs_target = f"{GRPC_PCCS_HOST}:{GRPC_PORT}"
         self.pccs_channel = grpc.aio.secure_channel(pccs_target, creds)
         self.logger.debug("gRPC PCCS channel created for %s", pccs_target)
+
+        # Only now that fresh channels are in place is it worth re-evaluating
+        # per-vehicle support; a failed reconnect keeps the old channels, and
+        # with them what we already learned about these vehicles.
+        self.unsupported_battery.clear()
+        self.unsupported_target_soc.clear()
 
     async def _discover_c3_host(self) -> tuple[str, int]:
         """Discover the C3 gRPC host via the cnepmob discovery endpoint."""
