@@ -41,6 +41,22 @@ GRPC_PCCS_HOST = "api.pccs-prod.plstr.io"
 GRPC_PORT = 443
 GRPC_TIMEOUT = 30
 
+# gRPC status codes that mean "this vehicle will never serve this data".
+#
+# Not all vehicles are provisioned in every backend: the Polestar 2 is a Volvo
+# CMA-platform car and is not registered in Polestar's own PCCS/chronos
+# platform, so TargetSocService returns PERMISSION_DENIED for it even though
+# the access token is perfectly valid (an unauthenticated call is rejected
+# earlier, at the gateway, with UNAUTHENTICATED). Retrying such a call on every
+# poll only produces log noise, so we remember the VIN and stop asking.
+UNSUPPORTED_STATUS_CODES = frozenset(
+    {
+        grpc.StatusCode.PERMISSION_DENIED,
+        grpc.StatusCode.UNIMPLEMENTED,
+        grpc.StatusCode.NOT_FOUND,
+    }
+)
+
 
 def _connection_status(value: int) -> ChargingConnectionStatus:
     name = polestar_battery_pb2.ChargerConnectionStatus.Name(value)
@@ -71,6 +87,8 @@ class PolestarGrpcClient:
         self.client_session = client_session
         self.c3_channel: grpc.aio.Channel | None = None
         self.pccs_channel: grpc.aio.Channel | None = None
+        self.unsupported_battery: set[str] = set()
+        self.unsupported_target_soc: set[str] = set()
         self.logger = _LOGGER.getChild(unique_id) if unique_id else _LOGGER
 
     async def connect(self) -> None:
@@ -86,6 +104,12 @@ class PolestarGrpcClient:
         pccs_target = f"{GRPC_PCCS_HOST}:{GRPC_PORT}"
         self.pccs_channel = grpc.aio.secure_channel(pccs_target, creds)
         self.logger.debug("gRPC PCCS channel created for %s", pccs_target)
+
+        # Only now that fresh channels are in place is it worth re-evaluating
+        # per-vehicle support; a failed reconnect keeps the old channels, and
+        # with them what we already learned about these vehicles.
+        self.unsupported_battery.clear()
+        self.unsupported_target_soc.clear()
 
     async def _discover_c3_host(self) -> tuple[str, int]:
         """Discover the C3 gRPC host via the cnepmob discovery endpoint."""
@@ -116,10 +140,33 @@ class PolestarGrpcClient:
             ("vin", vin),
         ]
 
+    def _mark_unsupported(self, unsupported: set[str], vin: str, what: str, exc: grpc.aio.AioRpcError) -> bool:
+        """Remember that a vehicle does not provide this data, if the error says so permanently."""
+        if exc.code() not in UNSUPPORTED_STATUS_CODES:
+            return False
+        unsupported.add(vin)
+        self.logger.info(
+            "gRPC %s not available for this vehicle (%s), not retrying",
+            what,
+            exc.code().name,
+        )
+        return True
+
+    def is_battery_supported(self, vin: str) -> bool:
+        """Whether the C3 battery service is known to serve data for this vehicle."""
+        return vin not in self.unsupported_battery
+
+    def is_target_soc_supported(self, vin: str) -> bool:
+        """Whether the PCCS target SOC service is known to serve data for this vehicle."""
+        return vin not in self.unsupported_target_soc
+
     async def get_battery(self, vin: str, access_token: str) -> GrpcBatteryData | None:
         """Get battery status including charger connection status via gRPC (C3/Volvo endpoint)."""
         if not self.c3_channel:
             raise RuntimeError("gRPC C3 channel not connected")
+
+        if vin in self.unsupported_battery:
+            return None
 
         request = polestar_battery_service_pb2.GetBatteryRequest(
             id=str(uuid.uuid4()),
@@ -143,6 +190,8 @@ class PolestarGrpcClient:
             return _parse_battery(response.battery)
 
         except grpc.aio.AioRpcError as exc:
+            if self._mark_unsupported(self.unsupported_battery, vin, "battery data", exc):
+                return None
             self.logger.error("gRPC GetLatestBattery failed: %s (code=%s)", exc.details(), exc.code())
             raise
 
@@ -150,6 +199,9 @@ class PolestarGrpcClient:
         """Get target SOC (charge limit) via gRPC (PCCS/Polestar endpoint)."""
         if not self.pccs_channel:
             raise RuntimeError("gRPC PCCS channel not connected")
+
+        if vin in self.unsupported_target_soc:
+            return None
 
         chronos_req = polestar_chronos_request_pb2.ChronosRequest(
             id=str(uuid.uuid4()),
@@ -180,6 +232,8 @@ class PolestarGrpcClient:
             return _parse_target_soc(response)
 
         except grpc.aio.AioRpcError as exc:
+            if self._mark_unsupported(self.unsupported_target_soc, vin, "target SOC", exc):
+                return None
             self.logger.error("gRPC GetTargetSoc failed: %s (code=%s)", exc.details(), exc.code())
             raise
 
