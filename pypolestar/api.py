@@ -211,6 +211,20 @@ class PolestarApi:
         self._ensure_data_for_vin(vin)
         return self.data_by_vin[vin].get(GRPC_TARGET_SOC_DATA)
 
+    def is_grpc_battery_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves battery data via gRPC (false once the backend has refused it)."""
+        return self.grpc_client.is_battery_supported(vin) if self.grpc_client else False
+
+    def is_grpc_target_soc_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves target SOC via gRPC.
+
+        Not every vehicle is provisioned in Polestar's PCCS platform -- notably the
+        Polestar 2 -- and those return PERMISSION_DENIED. This turns false after the
+        first such refusal, so consumers can drop the entity instead of showing it
+        permanently unknown.
+        """
+        return self.grpc_client.is_target_soc_supported(vin) if self.grpc_client else False
+
     async def update_latest_data(
         self,
         vin: str,
