@@ -8,6 +8,13 @@ CAR_IMAGES_DATA = "getCarImages"
 
 GRPC_BATTERY_DATA = "grpc_battery"
 GRPC_TARGET_SOC_DATA = "grpc_target_soc"
+GRPC_EXTERIOR_DATA = "grpc_exterior"
+GRPC_HEALTH_DATA = "grpc_health"
+GRPC_ODOMETER_DATA = "grpc_odometer"
+GRPC_CLIMATE_DATA = "grpc_climate"
+GRPC_AVAILABILITY_DATA = "grpc_availability"
+GRPC_PRECLEANING_DATA = "grpc_precleaning"
+GRPC_LOCATION_DATA = "grpc_location"
 
 HTTPX_TIMEOUT = 30
 TOKEN_REFRESH_WINDOW_MIN = 300

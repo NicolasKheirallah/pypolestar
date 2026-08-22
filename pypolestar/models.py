@@ -41,6 +41,8 @@ class BrakeFluidLevelWarning(StrEnumOptional):
     BRAKE_FLUID_LEVEL_WARNING_NO_WARNING = "No Warning"
     BRAKE_FLUID_LEVEL_WARNING_UNSPECIFIED = "Unspecified"
     BRAKE_FLUID_LEVEL_WARNING_TOO_LOW = "Too Low"
+    # Only reported by the gRPC HealthService, not the GraphQL health query.
+    BRAKE_FLUID_LEVEL_WARNING_CRITICALLY_LOW = "Critically Low"
 
 
 class EngineCoolantLevelWarning(StrEnumOptional):
@@ -67,6 +69,12 @@ class ServiceWarning(StrEnumOptional):
     SERVICE_WARNING_DISTANCE_DRIVEN_TIME_FOR_SERVICE = "Distance Driven Time For Service"
     SERVICE_WARNING_REGULAR_MAINTENANCE_OVERDUE_FOR_SERVICE = "Regular Maintenance Overdue For Service"
     SERVICE_WARNING_DISTANCE_DRIVEN_OVERDUE_FOR_SERVICE = "Distance Driven Overdue For Service"
+    # Only reported by the gRPC HealthService, not the GraphQL health query
+    # (combustion/hybrid "engine hours" variants and a generic unknown state).
+    SERVICE_WARNING_UNKNOWN_WARNING = "Unknown Warning"
+    SERVICE_WARNING_ENGINE_HOURS_ALMOST_TIME_FOR_SERVICE = "Engine Hours Almost Time For Service"
+    SERVICE_WARNING_ENGINE_HOURS_TIME_FOR_SERVICE = "Engine Hours Time For Service"
+    SERVICE_WARNING_ENGINE_HOURS_OVERDUE_FOR_SERVICE = "Engine Hours Overdue For Service"
 
 
 @dataclass(frozen=True)
@@ -125,6 +133,8 @@ class CarInformationData(CarBaseInformation):
     registration_no: str | None = None
     model_name: str | None = None
     model_year: str | None = None
+    pno34: str | None = None
+    structure_week: str | None = None
 
     # Deprecated fields - to be removed in future versions
     registration_date: date | None = None
@@ -163,6 +173,8 @@ class CarInformationData(CarBaseInformation):
             registration_no=get_field_name_str("registrationNo", data),
             model_name=model_name,
             model_year=get_field_name_str("modelYear", data),
+            pno34=get_field_name_str("pno34", data),
+            structure_week=get_field_name_str("structureWeek", data),
             image_url=None,
             _received_timestamp=datetime.now(tz=timezone.utc),
         )

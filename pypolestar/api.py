@@ -19,7 +19,14 @@ from .const import (
     API_MYSTAR_V2_URL,
     CAR_IMAGES_DATA,
     CAR_INFO_DATA,
+    GRPC_AVAILABILITY_DATA,
     GRPC_BATTERY_DATA,
+    GRPC_CLIMATE_DATA,
+    GRPC_EXTERIOR_DATA,
+    GRPC_HEALTH_DATA,
+    GRPC_LOCATION_DATA,
+    GRPC_ODOMETER_DATA,
+    GRPC_PRECLEANING_DATA,
     GRPC_TARGET_SOC_DATA,
     TELEMATICS_DATA,
 )
@@ -37,7 +44,17 @@ from .graphql import (
     get_gql_session,
 )
 from .grpc_client import PolestarGrpcClient
-from .grpc_models import GrpcBatteryData, GrpcTargetSocData
+from .grpc_models import (
+    GrpcAvailabilityData,
+    GrpcBatteryData,
+    GrpcClimateData,
+    GrpcExteriorData,
+    GrpcHealthData,
+    GrpcLocationData,
+    GrpcOdometerData,
+    GrpcPreCleaningData,
+    GrpcTargetSocData,
+)
 from .models import CarImagesData, CarInformationData, CarTelematicsData
 
 _LOGGER = logging.getLogger(__name__)
@@ -225,6 +242,69 @@ class PolestarApi:
         """
         return self.grpc_client.is_target_soc_supported(vin) if self.grpc_client else False
 
+    def get_grpc_exterior(self, vin: str) -> GrpcExteriorData | None:
+        """Get doors/windows/locks status from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_EXTERIOR_DATA)
+
+    def is_grpc_exterior_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves exterior data via gRPC."""
+        return self.grpc_client.is_exterior_supported(vin) if self.grpc_client else False
+
+    def get_grpc_health(self, vin: str) -> GrpcHealthData | None:
+        """Get per-tyre pressure and light warnings from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_HEALTH_DATA)
+
+    def is_grpc_health_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves health data via gRPC."""
+        return self.grpc_client.is_health_supported(vin) if self.grpc_client else False
+
+    def get_grpc_odometer(self, vin: str) -> GrpcOdometerData | None:
+        """Get trip meters and average speed from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_ODOMETER_DATA)
+
+    def is_grpc_odometer_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves odometer data via gRPC."""
+        return self.grpc_client.is_odometer_supported(vin) if self.grpc_client else False
+
+    def get_grpc_climate(self, vin: str) -> GrpcClimateData | None:
+        """Get parking climatization status from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_CLIMATE_DATA)
+
+    def is_grpc_climate_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves climate data via gRPC."""
+        return self.grpc_client.is_climate_supported(vin) if self.grpc_client else False
+
+    def get_grpc_availability(self, vin: str) -> GrpcAvailabilityData | None:
+        """Get vehicle online/awake availability from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_AVAILABILITY_DATA)
+
+    def is_grpc_availability_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves availability data via gRPC."""
+        return self.grpc_client.is_availability_supported(vin) if self.grpc_client else False
+
+    def get_grpc_precleaning(self, vin: str) -> GrpcPreCleaningData | None:
+        """Get cabin air pre-cleaning status from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_PRECLEANING_DATA)
+
+    def is_grpc_precleaning_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves pre-cleaning data via gRPC."""
+        return self.grpc_client.is_precleaning_supported(vin) if self.grpc_client else False
+
+    def get_grpc_location(self, vin: str) -> GrpcLocationData | None:
+        """Get last known GPS location from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_LOCATION_DATA)
+
+    def is_grpc_location_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves location data via gRPC."""
+        return self.grpc_client.is_location_supported(vin) if self.grpc_client else False
+
     async def update_latest_data(
         self,
         vin: str,
@@ -313,6 +393,25 @@ class PolestarApi:
             self.logger.debug("gRPC target SOC data: %s", target_soc)
         except Exception as exc:
             self.logger.warning("gRPC target SOC fetch failed: %s", exc)
+
+        # Everything below is best-effort (see CHANGELOG.md): each call is
+        # independently non-fatal so one unsupported/broken service can't
+        # take down the others or the rest of the update.
+        for key, getter, label in (
+            (GRPC_EXTERIOR_DATA, self.grpc_client.get_exterior, "exterior"),
+            (GRPC_HEALTH_DATA, self.grpc_client.get_health, "health"),
+            (GRPC_ODOMETER_DATA, self.grpc_client.get_odometer, "odometer"),
+            (GRPC_CLIMATE_DATA, self.grpc_client.get_climate, "climate"),
+            (GRPC_AVAILABILITY_DATA, self.grpc_client.get_availability, "availability"),
+            (GRPC_PRECLEANING_DATA, self.grpc_client.get_precleaning, "pre-cleaning"),
+            (GRPC_LOCATION_DATA, self.grpc_client.get_location, "location"),
+        ):
+            try:
+                result = await getter(vin, self.auth.access_token)
+                self.data_by_vin[vin][key] = result
+                self.logger.debug("gRPC %s data: %s", label, result)
+            except Exception as exc:
+                self.logger.warning("gRPC %s fetch failed: %s", label, exc)
 
     async def _get_all_vehicles_data(self) -> list[dict[str, Any]]:
         """Get the all vehicle data from the Polestar API."""

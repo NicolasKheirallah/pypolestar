@@ -123,3 +123,60 @@ def test_failed_reconnect_keeps_unsupported_vehicles():
     assert client.is_target_soc_supported(VIN) is False
     assert asyncio.run(client.get_target_soc(VIN, TOKEN)) is None
     assert channel.calls == 1, "a failed reconnect must not resurrect refused calls"
+
+
+# The seven best-effort C3 services added alongside battery/target_soc (see
+# CHANGELOG.md). All of them go through the same _mark_unsupported /
+# UNSUPPORTED_STATUS_CODES machinery as battery/target_soc above, whether
+# they're called unary (exterior, climate, availability, location) or
+# streaming-first-message (health, odometer, precleaning) -- FailingChannel
+# raises at call time either way, before any iteration would happen.
+NEW_C3_METHODS = [
+    ("get_exterior", "is_exterior_supported"),
+    ("get_health", "is_health_supported"),
+    ("get_odometer", "is_odometer_supported"),
+    ("get_climate", "is_climate_supported"),
+    ("get_availability", "is_availability_supported"),
+    ("get_precleaning", "is_precleaning_supported"),
+    ("get_location", "is_location_supported"),
+]
+
+
+@pytest.mark.parametrize("method_name,is_supported_name", NEW_C3_METHODS)
+@pytest.mark.parametrize("code", PERMANENT_STATUS_CODES)
+def test_new_c3_service_permanent_error_is_not_retried(method_name, is_supported_name, code):
+    channel = FailingChannel(_rpc_error(code))
+    client = _client(c3_channel=channel)
+    method = getattr(client, method_name)
+    is_supported = getattr(client, is_supported_name)
+
+    assert asyncio.run(method(VIN, TOKEN)) is None
+    assert is_supported(VIN) is False
+    assert channel.calls == 1
+
+    assert asyncio.run(method(VIN, TOKEN)) is None
+    assert channel.calls == 1, "unsupported vehicle should not hit the network again"
+
+
+@pytest.mark.parametrize("method_name,is_supported_name", NEW_C3_METHODS)
+def test_new_c3_service_transient_error_is_raised_and_retried(method_name, is_supported_name):
+    channel = FailingChannel(_rpc_error(grpc.StatusCode.UNAVAILABLE))
+    client = _client(c3_channel=channel)
+    method = getattr(client, method_name)
+    is_supported = getattr(client, is_supported_name)
+
+    for _ in range(2):
+        with pytest.raises(grpc.aio.AioRpcError):
+            asyncio.run(method(VIN, TOKEN))
+
+    assert is_supported(VIN) is True
+    assert channel.calls == 2
+
+
+@pytest.mark.parametrize("method_name", [name for name, _ in NEW_C3_METHODS])
+def test_new_c3_service_raises_without_channel(method_name):
+    client = PolestarGrpcClient(client_session=None)  # type: ignore[arg-type]
+    method = getattr(client, method_name)
+
+    with pytest.raises(RuntimeError, match="gRPC C3 channel not connected"):
+        asyncio.run(method(VIN, TOKEN))
