@@ -207,7 +207,10 @@ def _timestamp(msg) -> datetime:
     message-type fields is tracked by proto3 even though it isn't for plain
     scalars.
     """
-    return datetime.fromtimestamp(msg.seconds, tz=timezone.utc)
+    return datetime.fromtimestamp(
+        msg.seconds + msg.nanos / 1_000_000_000,
+        tz=timezone.utc,
+    )
 
 
 class PolestarGrpcClient:
