@@ -62,14 +62,49 @@ against a real vehicle) are welcome.
 No remote/write commands (lock, unlock, climate start/stop, charge target,
 etc.) were implemented in this pass — this fork is read-only telemetry only.
 
+### Live validation (2026-08-22, Polestar 2, MY2023)
+
+All seven new services were exercised against a real account and vehicle
+(`get_exterior`/`get_health`/`get_odometer`/`get_climate`/`get_availability`/
+`get_precleaning`/`get_location`, plus the `pno34`/`structure_week` fix).
+Every call succeeded (`is_<x>_supported() == True`, no
+`PERMISSION_DENIED`/`UNIMPLEMENTED` for any of them) and returned data that
+cross-checks as correct:
+
+- **`get_exterior`**: reported the car fully locked and closed while parked —
+  consistent with its actual state.
+- **`get_odometer`**: `odometer_meters` matched the existing, already-trusted
+  GraphQL `carTelematicsV2.odometer.odometerMeters` value *exactly* (both
+  121516496), on the same call. Trip meters and average speed (new; GraphQL
+  never populates these) came back as plausible, distinct values.
+- **`get_location`**: returned coordinates that plot in Gothenburg, Sweden —
+  correct for this account, and rules out the latitude/longitude fields
+  being swapped.
+- **`get_health`**: days/distance-to-service and all warning enums (brake
+  fluid, coolant, oil, service, low-voltage battery, 21 individual exterior
+  lights) came back as real, non-default `NO_WARNING`/`OFF` values rather
+  than falling through to `UNSPECIFIED` -- confirms those field numbers are
+  right. The four tyre-pressure-kPa and four tyre-pressure-warning fields
+  came back as zero/`UNSPECIFIED` on this vehicle specifically; given every
+  *other* field in the same message decoded correctly, this looks like this
+  Polestar 2's TPMS not reporting precise pressure (known to vary by model
+  year/hardware) rather than a wrong field number, but it's only confirmed
+  absent, not confirmed present-and-correct elsewhere.
+- **`get_climate`** / **`get_availability`** / **`get_precleaning`**:
+  returned internally consistent idle/off state for a parked, unoccupied car
+  (nothing running to exercise the active-state fields against).
+
+This is one vehicle, one model, one state (parked, idle, not charging, not
+climatizing). Active-charging, active-climate, and any-warning-present states
+are still unverified, as is behavior on Polestar 3/4/5.
+
 ### Field layout provenance and confidence
 
 Unlike the original `polestar_battery`/`polestar_target_soc` definitions
 (reconstructed from decompiling the Polestar Android APK directly), the
 seven services above were **not decompiled by this fork's author**. Their
 field layout was cross-referenced from multiple independent public
-reverse-engineering projects and treated as unverified until it can be
-checked against a real vehicle:
+reverse-engineering projects, then spot-checked live (above):
 
 - [`NicolasKheirallah/Hisingen`](https://github.com/NicolasKheirallah/Hisingen) —
   confirmed the gRPC service *paths* (e.g. `ExteriorService/GetLatestExterior`)

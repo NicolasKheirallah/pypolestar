@@ -43,7 +43,8 @@ grpc_exterior = api.get_grpc_exterior(vin=VIN)  # doors/windows/locks, best-effo
 The gRPC services added here are **read-only telemetry only** -- no remote/write commands
 (lock, climate start, charge target, etc.) are implemented. Their message field layout was
 cross-referenced from public reverse-engineering projects rather than decompiled directly by
-this fork's author, so treat them as best-effort until validated against a real vehicle: a
-service reporting itself unsupported (`is_grpc_<x>_supported(vin) == False`) may mean the
-vehicle genuinely doesn't serve that data, or that the guessed schema is wrong for it. See
-[CHANGELOG.md](CHANGELOG.md) for the full list of what was and wasn't implemented, and why.
+this fork's author. All seven have been spot-checked against one real Polestar 2 in a parked,
+idle state (odometer cross-verified byte-for-byte against the existing GraphQL field; GPS
+correctly placed the car in Gothenburg) -- see [CHANGELOG.md](CHANGELOG.md) for the full
+validation notes, what's still unverified (active charging/climate, other models), and the
+full list of what was and wasn't implemented, and why.
