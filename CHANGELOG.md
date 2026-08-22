@@ -2,6 +2,49 @@
 
 ## Unreleased (this fork)
 
+### Investigated, no further progress (2026-08-22)
+
+A follow-up investigation pass, in order of what was tried:
+
+- **gRPC server reflection** (`grpc.reflection.v1alpha.ServerReflection` and
+  the newer `v1`) -- tried against both C3 and PCCS, with and without auth
+  metadata. Cleanly `UNIMPLEMENTED` every time; disabled server-side. Would
+  have been the single best way to settle every remaining schema question
+  at once (enumerate every service + get real `FileDescriptorProto` bytes),
+  but it's not available.
+- **`services.vehiclestates.dashboard.DashboardService/GetLatestDashboard`**
+  (a path referenced by third-party clients, never tried before this fork) --
+  `UNIMPLEMENTED`, "Method not found". Doesn't exist at this path/name.
+- **`ota_mobcache.SchedulerService/GetSchedule`** (OTA install scheduling,
+  companion to `GetSoftwareInfo`) -- same `UNAUTHENTICATED`/"Authorization
+  failed" as `GetSoftwareInfo` got in the previous pass. Root cause found
+  this time: Hisingen's source comments explain the OIDC client `pypolestar`
+  authenticates as (`l3oopkc_10`) only requests scope
+  `"openid profile email customer:attributes"`, but `ota_mobcache.*`
+  requires `customer:attributes:write` in addition -- confirmed by
+  Hisingen's own comment that this scope exists specifically for
+  `SchedulerService`'s *write* RPCs. **Not pursued further**: requesting a
+  write-capable OAuth scope changes what the resulting token is technically
+  capable of even if `pypolestar`'s code only ever calls read methods with
+  it, which is a real trust-boundary change adjacent to the remote/write
+  commands this fork has deliberately stayed out of. Separately, Hisingen
+  also uses a *second* OIDC client (`lp8dyrd_10`) purely to satisfy a
+  client-ID allowlist gate on C3's invoke (write) RPCs -- unrelated to scope,
+  and also not pursued for the same reason.
+- **`GetVDMSCars`** (the app-backend GraphQL query for exterior colour,
+  upholstery, wheels, factory packages -- a different endpoint,
+  `pc-api.polestar.com/eu-north-1/app-backend/api/graphql`, from the
+  `mystar-v2`/`mystar-public` ones `pypolestar` already uses) -- reachable,
+  but every request was rejected at the edge (Cloudflare Worker in front of
+  it) with an empty-body `428` then `426` response, unchanged by adding
+  Hisingen's exact header set or switching to HTTP/2. Reads as
+  bot/fingerprint-based edge protection rather than a GraphQL-level or
+  auth-level rejection (those return JSON error bodies, not an empty
+  transport-level status). **Deliberately not pursued further**: getting
+  past this would mean specifically working around anti-automation
+  protection rather than reverse-engineering an API contract, which this
+  fork has not done anywhere else and shouldn't start here.
+
 ### Added
 
 - `CarInformationData.pno34` and `CarInformationData.structure_week`. Both were
