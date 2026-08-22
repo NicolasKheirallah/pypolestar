@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package car_information;
+
+// Only the fields with a confirmed, ground-truth match against a real
+// account are modeled here (see CHANGELOG.md "Live schema discovery" for the
+// captured evidence). The real response has ~80 more fields per car
+// (capability flags, factory option codes, etc.) that are structurally
+// visible but not confidently namable from one account's data; they are
+// left unmapped (protobuf silently preserves them as unknown fields rather
+// than erroring, so omitting them here is safe).
+
+message CarDetails {
+  string vin = 1;
+  string model_name = 6;
+  string model_year = 7;
+  // Confirmed by appearing twice in the same real response (once here, once
+  // in an unmapped diagnostics sub-block) with an identical value.
+  string installed_software_version = 9;
+  string market = 10;
+}
+
+message MyCarEntry {
+  CarDetails details = 1;
+  string registration_no = 4;
+}
+
+message GetMyCarsResponse {
+  // "GetMyCars" (plural) and the wrapping shape strongly suggest a list;
+  // only ever observed with exactly one entry (single-car account), which
+  // is indistinguishable on the wire from a singular field, so `repeated`
+  // is a safe, forward-compatible choice either way.
+  repeated MyCarEntry cars = 1;
+}

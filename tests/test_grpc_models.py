@@ -11,12 +11,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from pypolestar.grpc_client import (
+    _parse_amp_limit,
     _parse_availability,
     _parse_battery,
+    _parse_charge_schedule,
     _parse_climate,
     _parse_exterior,
     _parse_health,
     _parse_location,
+    _parse_mycars,
     _parse_odometer,
     _parse_precleaning,
     _parse_target_soc,
@@ -39,12 +42,15 @@ from pypolestar.grpc_models import (
 )
 from pypolestar.models import ServiceWarning
 from pypolestar.proto import (
+    polestar_amplimit_pb2,
     polestar_availability_pb2,
     polestar_battery_pb2,
     polestar_battery_service_pb2,
+    polestar_chargetimer_pb2,
     polestar_exterior_pb2,
     polestar_health_pb2,
     polestar_location_pb2,
+    polestar_mycars_pb2,
     polestar_odometer_pb2,
     polestar_parkingclimatization_pb2,
     polestar_precleaning_pb2,
@@ -337,3 +343,113 @@ def test_parse_location_preserves_zero_coordinates():
     assert data.latitude == 0.0
     assert data.longitude == 0.0
     assert data.stale is True
+
+
+# --------------------------------------------------------------------------
+# Live-schema-discovered services (see CHANGELOG.md "Live schema
+# discovery"). These use synthetic, anonymized values shaped like a real
+# captured response, not the real response itself.
+# --------------------------------------------------------------------------
+
+
+def test_parse_mycars_synthetic():
+    entry = polestar_mycars_pb2.MyCarEntry(
+        details=polestar_mycars_pb2.CarDetails(
+            vin=ANON_VIN,
+            model_name="Polestar 2",
+            model_year="2023",
+            installed_software_version="4.2.13",
+            market="SE",
+        ),
+        registration_no="AA-00-AA",
+    )
+    data = _parse_mycars(polestar_mycars_pb2.MyCarEntry.FromString(entry.SerializeToString()))
+
+    assert data.vin == ANON_VIN
+    assert data.model_name == "Polestar 2"
+    assert data.model_year == "2023"
+    assert data.installed_software_version == "4.2.13"
+    assert data.market == "SE"
+    assert data.registration_no == "AA-00-AA"
+
+
+def test_parse_mycars_empty_fields_become_none():
+    entry = polestar_mycars_pb2.MyCarEntry.FromString(polestar_mycars_pb2.MyCarEntry().SerializeToString())
+    data = _parse_mycars(entry)
+
+    assert data.vin is None
+    assert data.model_name is None
+    assert data.registration_no is None
+
+
+def test_parse_amp_limit_synthetic():
+    response = polestar_amplimit_pb2.GetAmpLimitResponse(
+        id=ANON_ID,
+        vin=ANON_VIN,
+        amp_limit=polestar_amplimit_pb2.AmpLimitReading(value=20, source="RCS"),
+        updated_at=1735689600000,  # 2025-01-01T00:00:00Z in epoch millis
+    )
+    data = _parse_amp_limit(polestar_amplimit_pb2.GetAmpLimitResponse.FromString(response.SerializeToString()))
+
+    assert data.value == 20
+    assert data.pending_value is None
+    assert data.updated_at == datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+
+def test_parse_amp_limit_preserves_zero_value():
+    response = polestar_amplimit_pb2.GetAmpLimitResponse(
+        amp_limit=polestar_amplimit_pb2.AmpLimitReading(value=0),
+    )
+    data = _parse_amp_limit(polestar_amplimit_pb2.GetAmpLimitResponse.FromString(response.SerializeToString()))
+    assert data.value == 0
+
+
+def test_parse_amp_limit_no_reading():
+    response = polestar_amplimit_pb2.GetAmpLimitResponse.FromString(
+        polestar_amplimit_pb2.GetAmpLimitResponse().SerializeToString()
+    )
+    data = _parse_amp_limit(response)
+    assert data.value is None
+    assert data.updated_at is None
+
+
+def test_parse_charge_schedule_synthetic():
+    response = polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse(
+        timer=polestar_chargetimer_pb2.ChargeTimerEntry(
+            start=polestar_chargetimer_pb2.ScheduleTime(hour=23),
+            end=polestar_chargetimer_pb2.ScheduleTime(hour=6),
+        ),
+        updated_at=1735689600000,
+    )
+    data = _parse_charge_schedule(
+        polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse.FromString(response.SerializeToString())
+    )
+
+    assert data.start_hour == 23
+    assert data.end_hour == 6
+    assert data.updated_at == datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+
+def test_parse_charge_schedule_preserves_midnight_hour():
+    # Hour 0 (midnight) is a real, common schedule boundary -- must not be
+    # dropped like a missing value would be.
+    response = polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse(
+        timer=polestar_chargetimer_pb2.ChargeTimerEntry(
+            start=polestar_chargetimer_pb2.ScheduleTime(hour=0),
+            end=polestar_chargetimer_pb2.ScheduleTime(hour=0),
+        ),
+    )
+    data = _parse_charge_schedule(
+        polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse.FromString(response.SerializeToString())
+    )
+    assert data.start_hour == 0
+    assert data.end_hour == 0
+
+
+def test_parse_charge_schedule_no_timer():
+    response = polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse.FromString(
+        polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse().SerializeToString()
+    )
+    data = _parse_charge_schedule(response)
+    assert data.start_hour is None
+    assert data.end_hour is None

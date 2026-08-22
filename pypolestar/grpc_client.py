@@ -26,12 +26,15 @@ from .grpc_models import (
     ChargingType,
     ClimateRunningStatus,
     ExteriorLightWarning,
+    GrpcAmpLimitData,
     GrpcAvailabilityData,
     GrpcBatteryData,
+    GrpcChargeScheduleData,
     GrpcClimateData,
     GrpcExteriorData,
     GrpcHealthData,
     GrpcLocationData,
+    GrpcMyCarsData,
     GrpcOdometerData,
     GrpcPreCleaningData,
     GrpcTargetSocData,
@@ -49,10 +52,13 @@ from .grpc_models import (
 )
 from .models import BrakeFluidLevelWarning, EngineCoolantLevelWarning, OilLevelWarning, ServiceWarning
 from .proto import (
+    polestar_amplimit_pb2,
     polestar_availability_pb2,
     polestar_availability_service_pb2,
     polestar_battery_pb2,
     polestar_battery_service_pb2,
+    polestar_chargetimer_pb2,
+    polestar_chargetimer_service_pb2,
     polestar_chronos_request_pb2,
     polestar_exterior_pb2,
     polestar_exterior_service_pb2,
@@ -60,6 +66,8 @@ from .proto import (
     polestar_health_service_pb2,
     polestar_location_pb2,
     polestar_location_service_pb2,
+    polestar_mycars_pb2,
+    polestar_mycars_service_pb2,
     polestar_odometer_pb2,
     polestar_odometer_service_pb2,
     polestar_parkingclimatization_pb2,
@@ -218,6 +226,9 @@ class PolestarGrpcClient:
         self.unsupported_availability: set[str] = set()
         self.unsupported_precleaning: set[str] = set()
         self.unsupported_location: set[str] = set()
+        self.unsupported_mycars: set[str] = set()
+        self.unsupported_amp_limit: set[str] = set()
+        self.unsupported_charge_schedule: set[str] = set()
         self.logger = _LOGGER.getChild(unique_id) if unique_id else _LOGGER
 
     async def connect(self) -> None:
@@ -246,6 +257,9 @@ class PolestarGrpcClient:
         self.unsupported_availability.clear()
         self.unsupported_precleaning.clear()
         self.unsupported_location.clear()
+        self.unsupported_mycars.clear()
+        self.unsupported_amp_limit.clear()
+        self.unsupported_charge_schedule.clear()
 
     async def _discover_c3_host(self) -> tuple[str, int]:
         """Discover the C3 gRPC host via the cnepmob discovery endpoint."""
@@ -323,6 +337,18 @@ class PolestarGrpcClient:
     def is_location_supported(self, vin: str) -> bool:
         """Whether the C3 location service is known to serve this vehicle."""
         return vin not in self.unsupported_location
+
+    def is_mycars_supported(self, vin: str) -> bool:
+        """Whether the C3 car_information.CarInformation/GetMyCars service is known to serve this vehicle."""
+        return vin not in self.unsupported_mycars
+
+    def is_amp_limit_supported(self, vin: str) -> bool:
+        """Whether the PCCS amp limit service is known to serve this vehicle."""
+        return vin not in self.unsupported_amp_limit
+
+    def is_charge_schedule_supported(self, vin: str) -> bool:
+        """Whether the PCCS global charge timer service is known to serve this vehicle."""
+        return vin not in self.unsupported_charge_schedule
 
     async def get_battery(self, vin: str, access_token: str) -> GrpcBatteryData | None:
         """Get battery status including charger connection status via gRPC (C3/Volvo endpoint)."""
@@ -649,6 +675,130 @@ class PolestarGrpcClient:
             self.logger.error("gRPC GetLastParkedLocation failed: %s (code=%s)", exc.details(), exc.code())
             raise
 
+    async def get_mycars(self, vin: str, access_token: str) -> GrpcMyCarsData | None:
+        """Get vehicle identity + installed software version via gRPC (C3 endpoint).
+
+        Unlike the other best-effort services in this fork, this one was
+        live-tested end to end against a real account/vehicle -- see
+        CHANGELOG.md "Live schema discovery".
+        """
+        if not self.c3_channel:
+            raise RuntimeError("gRPC C3 channel not connected")
+
+        if vin in self.unsupported_mycars:
+            return None
+
+        request = polestar_mycars_service_pb2.GetMyCarsRequest(id=str(uuid.uuid4()), vin=vin)
+
+        try:
+            response = await self.c3_channel.unary_unary(
+                "/car_information.CarInformation/GetMyCars",
+                request_serializer=polestar_mycars_service_pb2.GetMyCarsRequest.SerializeToString,
+                response_deserializer=polestar_mycars_pb2.GetMyCarsResponse.FromString,
+            )(request, metadata=self._metadata(access_token, vin), timeout=GRPC_TIMEOUT)
+
+            self.logger.debug("gRPC GetMyCars response: %s", response)
+
+            matching = next((car for car in response.cars if car.details.vin == vin), None)
+            if matching is None and len(response.cars) == 1:
+                # Single-car accounts sometimes don't echo the vin back on
+                # every nested field; fall back to the only entry present.
+                matching = response.cars[0]
+            if matching is None:
+                self.logger.warning("gRPC GetMyCars: no matching car in response")
+                return None
+
+            return _parse_mycars(matching)
+
+        except grpc.aio.AioRpcError as exc:
+            if self._mark_unsupported(self.unsupported_mycars, vin, "mycars data", exc):
+                return None
+            self.logger.error("gRPC GetMyCars failed: %s (code=%s)", exc.details(), exc.code())
+            raise
+
+    async def get_amp_limit(self, vin: str, access_token: str) -> GrpcAmpLimitData | None:
+        """Get charging current limit via gRPC (PCCS endpoint, best-effort).
+
+        Live-tested: a real call received one valid message immediately, then
+        held the connection open past a 15s deadline rather than closing --
+        read the same way as get_target_soc, first message only.
+        """
+        if not self.pccs_channel:
+            raise RuntimeError("gRPC PCCS channel not connected")
+
+        if vin in self.unsupported_amp_limit:
+            return None
+
+        chronos_req = polestar_chronos_request_pb2.ChronosRequest(id=str(uuid.uuid4()), vin=vin, source="mobile")
+        request = polestar_amplimit_pb2.GetAmpLimitRequest(request=chronos_req)
+
+        try:
+            call = self.pccs_channel.unary_stream(
+                "/pccs.chronos.services.v1.AmpLimitService/GetAmpLimit",
+                request_serializer=polestar_amplimit_pb2.GetAmpLimitRequest.SerializeToString,
+                response_deserializer=polestar_amplimit_pb2.GetAmpLimitResponse.FromString,
+            )(request, metadata=self._metadata(access_token, vin), timeout=GRPC_TIMEOUT)
+
+            response = None
+            async for msg in call:
+                response = msg
+                break
+
+            if response is None:
+                self.logger.warning("gRPC GetAmpLimit: empty stream")
+                return None
+
+            self.logger.debug("gRPC GetAmpLimit response: %s", response)
+
+            return _parse_amp_limit(response)
+
+        except grpc.aio.AioRpcError as exc:
+            if self._mark_unsupported(self.unsupported_amp_limit, vin, "amp limit", exc):
+                return None
+            self.logger.error("gRPC GetAmpLimit failed: %s (code=%s)", exc.details(), exc.code())
+            raise
+
+    async def get_charge_schedule(self, vin: str, access_token: str) -> GrpcChargeScheduleData | None:
+        """Get the overnight charging window via gRPC (PCCS endpoint, best-effort).
+
+        Live-tested the same way as get_amp_limit: one message then a
+        long-lived open stream, so only the first message is read.
+        """
+        if not self.pccs_channel:
+            raise RuntimeError("gRPC PCCS channel not connected")
+
+        if vin in self.unsupported_charge_schedule:
+            return None
+
+        chronos_req = polestar_chronos_request_pb2.ChronosRequest(id=str(uuid.uuid4()), vin=vin, source="mobile")
+        request = polestar_chargetimer_service_pb2.GetGlobalChargeTimerStreamRequest(request=chronos_req)
+
+        try:
+            call = self.pccs_channel.unary_stream(
+                "/pccs.chronos.services.v2.GlobalChargeTimerService/GetGlobalChargeTimerStream",
+                request_serializer=polestar_chargetimer_service_pb2.GetGlobalChargeTimerStreamRequest.SerializeToString,
+                response_deserializer=polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse.FromString,
+            )(request, metadata=self._metadata(access_token, vin), timeout=GRPC_TIMEOUT)
+
+            response = None
+            async for msg in call:
+                response = msg
+                break
+
+            if response is None or not response.HasField("timer"):
+                self.logger.warning("gRPC GetGlobalChargeTimerStream: empty stream or no timer field")
+                return None
+
+            self.logger.debug("gRPC GetGlobalChargeTimerStream response: %s", response)
+
+            return _parse_charge_schedule(response)
+
+        except grpc.aio.AioRpcError as exc:
+            if self._mark_unsupported(self.unsupported_charge_schedule, vin, "charge schedule", exc):
+                return None
+            self.logger.error("gRPC GetGlobalChargeTimerStream failed: %s (code=%s)", exc.details(), exc.code())
+            raise
+
 
 def _parse_battery(b: polestar_battery_pb2.Battery) -> GrpcBatteryData:
     """Parse a Battery protobuf message into GrpcBatteryData."""
@@ -858,4 +1008,47 @@ def _parse_location(response: polestar_location_pb2.LastParkedLocation) -> GrpcL
         longitude=location.longitude,
         stale=response.stale,
         timestamp=_timestamp(location.timestamp) if location.HasField("timestamp") else None,
+    )
+
+
+def _timestamp_millis(value: int) -> datetime | None:
+    """Convert an epoch-milliseconds int64 (this family's other timestamp shape,
+    seen in AmpLimitReading/ChronosRequest-adjacent messages instead of the
+    {seconds, nanos} Timestamp message used elsewhere)."""
+    return datetime.fromtimestamp(value / 1000, tz=timezone.utc) if value else None
+
+
+def _parse_mycars(car: polestar_mycars_pb2.MyCarEntry) -> GrpcMyCarsData:
+    """Parse a MyCarEntry protobuf message into GrpcMyCarsData."""
+    details = car.details
+    return GrpcMyCarsData(
+        vin=details.vin or None,
+        model_name=details.model_name or None,
+        model_year=details.model_year or None,
+        installed_software_version=details.installed_software_version or None,
+        market=details.market or None,
+        registration_no=car.registration_no or None,
+    )
+
+
+def _parse_amp_limit(response: polestar_amplimit_pb2.GetAmpLimitResponse) -> GrpcAmpLimitData:
+    """Parse a GetAmpLimitResponse protobuf message into GrpcAmpLimitData."""
+    value = response.amp_limit.value if response.HasField("amp_limit") else None
+    pending_value = response.pending_amp_limit.value if response.HasField("pending_amp_limit") else None
+    return GrpcAmpLimitData(
+        value=value,
+        pending_value=pending_value,
+        updated_at=_timestamp_millis(response.updated_at),
+    )
+
+
+def _parse_charge_schedule(
+    response: polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse,
+) -> GrpcChargeScheduleData:
+    """Parse a GetGlobalChargeTimerStreamResponse protobuf message into GrpcChargeScheduleData."""
+    timer = response.timer
+    return GrpcChargeScheduleData(
+        start_hour=timer.start.hour if timer.HasField("start") else None,
+        end_hour=timer.end.hour if timer.HasField("end") else None,
+        updated_at=_timestamp_millis(response.updated_at),
     )

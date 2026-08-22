@@ -19,12 +19,15 @@ from .const import (
     API_MYSTAR_V2_URL,
     CAR_IMAGES_DATA,
     CAR_INFO_DATA,
+    GRPC_AMP_LIMIT_DATA,
     GRPC_AVAILABILITY_DATA,
     GRPC_BATTERY_DATA,
+    GRPC_CHARGE_SCHEDULE_DATA,
     GRPC_CLIMATE_DATA,
     GRPC_EXTERIOR_DATA,
     GRPC_HEALTH_DATA,
     GRPC_LOCATION_DATA,
+    GRPC_MYCARS_DATA,
     GRPC_ODOMETER_DATA,
     GRPC_PRECLEANING_DATA,
     GRPC_TARGET_SOC_DATA,
@@ -45,12 +48,15 @@ from .graphql import (
 )
 from .grpc_client import PolestarGrpcClient
 from .grpc_models import (
+    GrpcAmpLimitData,
     GrpcAvailabilityData,
     GrpcBatteryData,
+    GrpcChargeScheduleData,
     GrpcClimateData,
     GrpcExteriorData,
     GrpcHealthData,
     GrpcLocationData,
+    GrpcMyCarsData,
     GrpcOdometerData,
     GrpcPreCleaningData,
     GrpcTargetSocData,
@@ -305,6 +311,37 @@ class PolestarApi:
         """Whether the vehicle serves location data via gRPC."""
         return self.grpc_client.is_location_supported(vin) if self.grpc_client else False
 
+    def get_grpc_mycars(self, vin: str) -> GrpcMyCarsData | None:
+        """Get vehicle identity + installed software version from gRPC API.
+
+        Live-tested end to end against a real account -- see CHANGELOG.md
+        "Live schema discovery".
+        """
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_MYCARS_DATA)
+
+    def is_grpc_mycars_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves data via gRPC car_information.CarInformation/GetMyCars."""
+        return self.grpc_client.is_mycars_supported(vin) if self.grpc_client else False
+
+    def get_grpc_amp_limit(self, vin: str) -> GrpcAmpLimitData | None:
+        """Get charging current limit from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_AMP_LIMIT_DATA)
+
+    def is_grpc_amp_limit_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves amp limit data via gRPC."""
+        return self.grpc_client.is_amp_limit_supported(vin) if self.grpc_client else False
+
+    def get_grpc_charge_schedule(self, vin: str) -> GrpcChargeScheduleData | None:
+        """Get the overnight charging window from gRPC API (best-effort, see CHANGELOG.md)."""
+        self._ensure_data_for_vin(vin)
+        return self.data_by_vin[vin].get(GRPC_CHARGE_SCHEDULE_DATA)
+
+    def is_grpc_charge_schedule_supported(self, vin: str) -> bool:
+        """Whether the vehicle serves a charge schedule via gRPC."""
+        return self.grpc_client.is_charge_schedule_supported(vin) if self.grpc_client else False
+
     async def update_latest_data(
         self,
         vin: str,
@@ -405,6 +442,9 @@ class PolestarApi:
             (GRPC_AVAILABILITY_DATA, self.grpc_client.get_availability, "availability"),
             (GRPC_PRECLEANING_DATA, self.grpc_client.get_precleaning, "pre-cleaning"),
             (GRPC_LOCATION_DATA, self.grpc_client.get_location, "location"),
+            (GRPC_MYCARS_DATA, self.grpc_client.get_mycars, "mycars"),
+            (GRPC_AMP_LIMIT_DATA, self.grpc_client.get_amp_limit, "amp limit"),
+            (GRPC_CHARGE_SCHEDULE_DATA, self.grpc_client.get_charge_schedule, "charge schedule"),
         ):
             try:
                 result = await getter(vin, self.auth.access_token)

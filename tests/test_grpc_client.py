@@ -139,6 +139,7 @@ NEW_C3_METHODS = [
     ("get_availability", "is_availability_supported"),
     ("get_precleaning", "is_precleaning_supported"),
     ("get_location", "is_location_supported"),
+    ("get_mycars", "is_mycars_supported"),
 ]
 
 
@@ -179,4 +180,52 @@ def test_new_c3_service_raises_without_channel(method_name):
     method = getattr(client, method_name)
 
     with pytest.raises(RuntimeError, match="gRPC C3 channel not connected"):
+        asyncio.run(method(VIN, TOKEN))
+
+
+# The two live-schema-discovered PCCS services (see CHANGELOG.md "Live
+# schema discovery"): same streaming-first-message shape as get_target_soc.
+NEW_PCCS_METHODS = [
+    ("get_amp_limit", "is_amp_limit_supported"),
+    ("get_charge_schedule", "is_charge_schedule_supported"),
+]
+
+
+@pytest.mark.parametrize("method_name,is_supported_name", NEW_PCCS_METHODS)
+@pytest.mark.parametrize("code", PERMANENT_STATUS_CODES)
+def test_new_pccs_service_permanent_error_is_not_retried(method_name, is_supported_name, code):
+    channel = FailingChannel(_rpc_error(code))
+    client = _client(pccs_channel=channel)
+    method = getattr(client, method_name)
+    is_supported = getattr(client, is_supported_name)
+
+    assert asyncio.run(method(VIN, TOKEN)) is None
+    assert is_supported(VIN) is False
+    assert channel.calls == 1
+
+    assert asyncio.run(method(VIN, TOKEN)) is None
+    assert channel.calls == 1, "unsupported vehicle should not hit the network again"
+
+
+@pytest.mark.parametrize("method_name,is_supported_name", NEW_PCCS_METHODS)
+def test_new_pccs_service_transient_error_is_raised_and_retried(method_name, is_supported_name):
+    channel = FailingChannel(_rpc_error(grpc.StatusCode.UNAVAILABLE))
+    client = _client(pccs_channel=channel)
+    method = getattr(client, method_name)
+    is_supported = getattr(client, is_supported_name)
+
+    for _ in range(2):
+        with pytest.raises(grpc.aio.AioRpcError):
+            asyncio.run(method(VIN, TOKEN))
+
+    assert is_supported(VIN) is True
+    assert channel.calls == 2
+
+
+@pytest.mark.parametrize("method_name", [name for name, _ in NEW_PCCS_METHODS])
+def test_new_pccs_service_raises_without_channel(method_name):
+    client = PolestarGrpcClient(client_session=None)  # type: ignore[arg-type]
+    method = getattr(client, method_name)
+
+    with pytest.raises(RuntimeError, match="gRPC PCCS channel not connected"):
         asyncio.run(method(VIN, TOKEN))

@@ -32,35 +32,58 @@
   (rather than duplicating them in `grpc_models.py`) since gRPC's `Health`
   message reports a superset of the same warning types GraphQL does.
 
+- Three more gRPC services, reverse-engineered directly from a real
+  account/vehicle rather than cross-referenced from other projects -- see
+  "Live schema discovery" below:
+
+  | Method | Data | New in `pypolestar` |
+  | --- | --- | --- |
+  | `get_mycars` | Vehicle identity, installed software version | GraphQL has no installed-software-version field at all |
+  | `get_amp_limit` | Charging current limit (read) | Not available via GraphQL at all |
+  | `get_charge_schedule` | Overnight charging window (start/end hour) | Not available via GraphQL at all |
+
 ### Explicitly not implemented
 
-These were identified as gaps against a third-party client but **no public
-protobuf schema could be found** for them from any source below, so they were
-not guessed at:
+- No remote/write commands (lock, unlock, climate start/stop, charge target,
+  etc.) were implemented in this pass — this fork is read-only telemetry
+  only.
+- `weather.WeatherService/GetWeatherReport`, `services.vehiclestates.weather.WeatherService/GetLatestWeather`,
+  `services.vehiclestates.airquality.AirQualityService/{GetLatestAirQuality,GetAirQuality}` —
+  live-tested against a real account (see below); every method name tried
+  returned `UNIMPLEMENTED`/"Method not found" on both C3 and PCCS. Either
+  these aren't real endpoints, or the real method name differs from every
+  variant tried.
+- `ota_mobcache.OtaDiscoveryService/GetSoftwareInfo` — live-tested; returned
+  `UNAUTHENTICATED` ("Authorization failed"), not `UNIMPLEMENTED`/`NOT_FOUND`,
+  meaning the endpoint exists but this account's token doesn't have whatever
+  scope it needs. `get_mycars` (below) already covers the same underlying
+  need (installed software version) via a working endpoint, so this wasn't
+  pursued further.
+- `chronos.services.v1.ErrorService/GetErrors` and `pccs.chronos.services.v1.ErrorService/GetErrors` —
+  the bare `chronos.*` path is `UNIMPLEMENTED`; the `pccs.chronos.*` path
+  accepts the request (no error) but never emitted a message before a 15s
+  deadline, on a vehicle with no active faults. Plausibly a "subscribe and
+  wait" stream with nothing to report right now, or the wrong service --
+  can't be told apart without either a longer-lived test or an account
+  currently showing a fault.
+- `pccs.chronos.services.v1.ChargeLocationService/GetChargeLocations` —
+  live-tested; the request succeeds and returns the id/vin envelope with no
+  entries, because this account has no saved charge locations. The outer
+  envelope is confirmed but there's no populated example to reverse-engineer
+  a per-location entry's fields from (alias, amp limit, minimum SoC, etc.).
+- `pccs.chronos.services.v1.ParkingClimateTimerService/GetTimers` —
+  live-tested; returned a real, structurally similar entry to
+  `GlobalChargeTimerService`'s, but for what looks like a disabled/default
+  timer (mostly-zero fields, one raw sub-field this fork's decoder couldn't
+  parse as a coherent scalar -- possibly a packed-repeated field, e.g.
+  days-of-week). Lower confidence than `GlobalChargeTimerService`, where two
+  clearly-different, clearly-sane hour values (23 and 6) gave a strong
+  signal; here there wasn't an equivalent signal to confirm field meaning
+  against, so it wasn't implemented.
 
-- `ota_mobcache.OtaDiscoveryService/GetSoftwareInfo` (installed/available
-  software version, update state)
-- `car_information.CarInformation/GetMyCars` (OTA capability flags,
-  authoritative installed version)
-- `pccs.chronos.services.v1.AmpLimitService/GetAmpLimit` (charging current
-  limit, read)
-- `weather.WeatherService/GetWeatherReport` (vehicle-reported local weather —
-  distinct from calling a third-party weather API with the vehicle's
-  coordinates, which needs no Polestar schema at all)
-- `services.vehiclestates.airquality.AirQualityService` (cabin air quality)
-- `chronos.services.v1.ErrorService/GetErrors` (vehicle fault/error codes)
-- `pccs.chronos.services.v1.ChargeLocationService` /
-  `GlobalChargeTimerService` / `ParkingClimateTimerService` (saved charge
-  locations, charging schedules, climate schedules)
-
-Only the gRPC method *paths* for these are publicly known (see sources
-below); the message field layout is not, and guessing field numbers risks
-silently misreporting real vehicle state rather than just failing loudly.
-Contributions with a verified schema (e.g. from your own captured traffic
-against a real vehicle) are welcome.
-
-No remote/write commands (lock, unlock, climate start/stop, charge target,
-etc.) were implemented in this pass — this fork is read-only telemetry only.
+Contributions with a verified schema for any of the above (e.g. your own
+captured traffic against a real vehicle with saved charge locations, an
+active fault, or a configured climate timer) are welcome.
 
 ### Live validation (2026-08-22, Polestar 2, MY2023)
 
@@ -98,13 +121,68 @@ This is one vehicle, one model, one state (parked, idle, not charging, not
 climatizing). Active-charging, active-climate, and any-warning-present states
 are still unverified, as is behavior on Polestar 3/4/5.
 
-### Field layout provenance and confidence
+### Live schema discovery (2026-08-22, same account/vehicle as above)
+
+`get_mycars`, `get_amp_limit` and `get_charge_schedule` were reverse-engineered
+directly, not cross-referenced from another project: the known gRPC *path*
+for each (from the same public sources as above, which publish paths but not
+schemas) was called with a real access token and a generic
+`{id: uuid, vin: VIN}` or `ChronosRequest{id, vin, source="mobile"}` request
+(the shape every other confirmed service in this fork uses), and the raw
+response bytes were decoded with a throwaway generic protobuf wire-format
+reader (field number + wire type + value, recursively) -- effectively
+`protoc --decode_raw` against a live endpoint. This is the same kind of
+interoperability reverse-engineering `pypolestar` already does by decompiling
+the Polestar app; the only difference is reading it from the wire instead of
+from the app binary.
+
+- **`get_mycars`**: the response decoded cleanly into `vin`, `model_name`,
+  `model_year`, `market` and `registration_no` that matched this account's
+  already-known values exactly, plus `installed_software_version` ("4.2.13")
+  -- which appeared *twice*, in two unrelated-looking parts of the same
+  message, strengthening confidence it's really the software version and not
+  a coincidence. The full response has ~80 more fields (capability flags,
+  factory option codes) visible on the wire but not confidently namable from
+  one account's data; they're left unmapped rather than guessed (protobuf
+  quietly preserves undefined fields as "unknown", it doesn't error).
+- **`get_amp_limit`**: the response envelope
+  (`id`/`vin`/`reading{value,updated_at,source,id}`/`updated_at`) is
+  structurally identical to the already-proven `GetTargetSocResponse`,
+  strongly suggesting PCCS chronos services share one settings-envelope
+  convention. `value` came back `20`, a plausible AC current in amps, but was
+  not cross-checked against this account's actual configured limit. The call
+  also revealed this service is long-lived/server-streaming in practice (one
+  message, then the connection stays open past a 15s deadline rather than
+  closing) -- read the same way as `get_target_soc`: first message only.
+- **`get_charge_schedule`**: returned a real schedule,
+  `start.hour=23, end.hour=6` -- a plain, ordinary overnight/off-peak
+  charging window. No explicit minute field was present in either
+  `ScheduleTime`; proto3 omits zero-valued scalar fields on the wire, so
+  this is consistent with (but doesn't prove) a round-hour schedule. A
+  same-valued nested sub-field (120) appeared identically in both `start`
+  and `end`; a plausible read is a timezone-offset-in-minutes wrapper
+  (120 = UTC+2, correct for Swedish summer time) shared by the whole
+  message rather than varying per-field, but this wasn't confirmed and was
+  deliberately left unmapped instead of named.
+
+A one-line raw-decode fix was needed mid-investigation: the initial probe
+guessed `source` at field 4 of `ChronosRequest` instead of field 3 (field 4
+is actually a `TimeZone` submessage), which the server rejected server-side
+("Exception was thrown by handler") for every PCCS chronos service tried.
+Checking pypolestar's own already-working `polestar_chronos_request.proto`
+instead of re-guessing resolved it immediately -- worth remembering that the
+existing proven schemas are a better source of truth than fresh guessing
+even when investigating unrelated services.
+
+### Field layout provenance and confidence (the first seven services)
 
 Unlike the original `polestar_battery`/`polestar_target_soc` definitions
-(reconstructed from decompiling the Polestar Android APK directly), the
-seven services above were **not decompiled by this fork's author**. Their
-field layout was cross-referenced from multiple independent public
-reverse-engineering projects, then spot-checked live (above):
+(reconstructed from decompiling the Polestar Android APK directly), and
+unlike `get_mycars`/`get_amp_limit`/`get_charge_schedule` above (discovered
+live, see previous section), the seven services in "Added" above were **not
+decompiled by this fork's author**. Their field layout was cross-referenced
+from multiple independent public reverse-engineering projects, then
+spot-checked live (see "Live validation" above):
 
 - [`NicolasKheirallah/Hisingen`](https://github.com/NicolasKheirallah/Hisingen) —
   confirmed the gRPC service *paths* (e.g. `ExteriorService/GetLatestExterior`)

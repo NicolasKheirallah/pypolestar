@@ -312,3 +312,60 @@ class GrpcLocationData:
     longitude: float | None
     stale: bool | None
     timestamp: datetime | None
+
+
+# --------------------------------------------------------------------------
+# Live-schema-discovered services (see CHANGELOG.md "Live schema discovery").
+# Unlike everything above, these three were reverse-engineered directly by
+# calling the real gRPC endpoint and decoding the raw wire format against a
+# real account/vehicle, then cross-checked against known ground truth (VIN,
+# model, registration plate, software version, an active charge schedule).
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GrpcMyCarsData:
+    """Vehicle identity + installed software version from car_information.CarInformation/GetMyCars.
+
+    The real response has ~80 more fields per car (capability flags, factory
+    option codes) that are visible on the wire but not confidently namable
+    from one account's data, so only the fields with a confirmed ground-truth
+    match are modeled: this fork's contribution is the installed software
+    version, which GraphQL does not expose at all.
+    """
+
+    vin: str | None
+    model_name: str | None
+    model_year: str | None
+    installed_software_version: str | None
+    market: str | None
+    registration_no: str | None
+
+
+@dataclass(frozen=True)
+class GrpcAmpLimitData:
+    """Charging current limit from the gRPC AmpLimitService.
+
+    Structurally identical to GrpcTargetSocData (id/vin/reading/updated_at),
+    confirmed against a real account; the specific `value` (amps) has not
+    been cross-checked against the account's actual configured limit.
+    """
+
+    value: int | None
+    pending_value: int | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class GrpcChargeScheduleData:
+    """Overnight charging window from the gRPC GlobalChargeTimerService.
+
+    `start_hour`/`end_hour` are moderate-confidence (0-23, matched a real
+    23:00-06:00 schedule); no minute granularity is modeled -- see
+    CHANGELOG.md for why. Days-of-week / enabled state are not modeled at
+    all: no confirmed field for them was found.
+    """
+
+    start_hour: int | None
+    end_hour: int | None
+    updated_at: datetime | None

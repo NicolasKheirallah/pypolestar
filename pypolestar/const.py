@@ -15,6 +15,9 @@ GRPC_CLIMATE_DATA = "grpc_climate"
 GRPC_AVAILABILITY_DATA = "grpc_availability"
 GRPC_PRECLEANING_DATA = "grpc_precleaning"
 GRPC_LOCATION_DATA = "grpc_location"
+GRPC_MYCARS_DATA = "grpc_mycars"
+GRPC_AMP_LIMIT_DATA = "grpc_amp_limit"
+GRPC_CHARGE_SCHEDULE_DATA = "grpc_charge_schedule"
 
 HTTPX_TIMEOUT = 30
 TOKEN_REFRESH_WINDOW_MIN = 300
