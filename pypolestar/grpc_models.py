@@ -1,12 +1,15 @@
 """Data models for the Polestar gRPC API."""
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
-from .models import (
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+
+from .enum import (
     BrakeFluidLevelWarning,
+    ChargeTargetLevelSettingType,
     ChargingConnectionStatus,
     ChargingStatus,
+    ChargingType,
     EngineCoolantLevelWarning,
     OilLevelWarning,
     ServiceWarning,
@@ -14,23 +17,19 @@ from .models import (
 )
 
 
-class ChargingType(StrEnumOptional):
-    CHARGING_TYPE_UNSPECIFIED = "Unspecified"
-    CHARGING_TYPE_NONE = "None"
-    CHARGING_TYPE_AC = "AC"
-    CHARGING_TYPE_DC = "DC"
-    CHARGING_TYPE_WIRELESS = "Wireless"
+class GrpcBaseModel(BaseModel):
+    """Base class for gRPC data models."""
+
+    _received_timestamp: datetime = PrivateAttr(default_factory=lambda: datetime.now(tz=timezone.utc))
+
+    model_config = ConfigDict(frozen=True)
+
+    def get_received_timestamp(self) -> datetime:
+        """Return the timestamp when the data was received."""
+        return self._received_timestamp
 
 
-class ChargeTargetLevelSettingType(StrEnumOptional):
-    CHARGE_TARGET_LEVEL_SETTING_TYPE_UNSPECIFIED = "Unspecified"
-    DAILY = "Daily"
-    LONG_TRIP = "Long Trip"
-    CUSTOM = "Custom"
-
-
-@dataclass(frozen=True)
-class GrpcBatteryData:
+class GrpcBatteryData(GrpcBaseModel):
     """Battery data from the gRPC API (richer than GraphQL)."""
 
     charger_connection_status: ChargingConnectionStatus
@@ -48,8 +47,7 @@ class GrpcBatteryData:
     timestamp: datetime | None
 
 
-@dataclass(frozen=True)
-class GrpcTargetSocData:
+class GrpcTargetSocData(GrpcBaseModel):
     """Target SOC (charge limit) from the gRPC API."""
 
     battery_charge_target_level: int | None
@@ -85,8 +83,7 @@ class AlarmStatus(StrEnumOptional):
     ALARM_STATUS_TRIGGERED = "Triggered"
 
 
-@dataclass(frozen=True)
-class GrpcExteriorData:
+class GrpcExteriorData(GrpcBaseModel):
     """Doors, windows, locks and related exterior state from the gRPC API.
 
     Not available through GraphQL at all today.
@@ -136,13 +133,12 @@ class LowVoltageBatteryWarning(StrEnumOptional):
     LOW_VOLTAGE_BATTERY_WARNING_TOO_LOW = "Too Low"
 
 
-@dataclass(frozen=True)
-class GrpcHealthData:
+class GrpcHealthData(GrpcBaseModel):
     """Per-tyre pressure and light-failure warnings from the gRPC HealthService.
 
     Richer than the GraphQL carTelematicsV2.health query, which only reports
     brake fluid / coolant / oil / overall service warnings. The four
-    overlapping warning types reuse pypolestar.models' GraphQL enums
+    overlapping warning types reuse pypolestar.enum's GraphQL enums
     (extended with the extra values gRPC reports) rather than duplicating
     them.
     """
@@ -166,12 +162,11 @@ class GrpcHealthData:
     rear_right_tyre_pressure_kpa: float | None
     front_tyres_reference_pressure_kpa: float | None
     rear_tyres_reference_pressure_kpa: float | None
-    exterior_light_warnings: dict[str, ExteriorLightWarning] = field(default_factory=dict)
+    exterior_light_warnings: dict[str, ExteriorLightWarning] = Field(default_factory=dict)
     timestamp: datetime | None = None
 
 
-@dataclass(frozen=True)
-class GrpcOdometerData:
+class GrpcOdometerData(GrpcBaseModel):
     """Trip meters and average speed from the gRPC OdometerService.
 
     Not available through GraphQL: CarOdometerData has fields for these but
@@ -216,8 +211,7 @@ class Ventilation(StrEnumOptional):
     VENTILATION_NEUTRAL = "Neutral"
 
 
-@dataclass(frozen=True)
-class GrpcClimateData:
+class GrpcClimateData(GrpcBaseModel):
     """Parking climatization status from the gRPC ParkingClimatizationService.
 
     Not available through GraphQL at all today.
@@ -266,8 +260,7 @@ class UsageMode(StrEnumOptional):
     USAGE_MODE_ENGINE_OFF = "Engine Off"
 
 
-@dataclass(frozen=True)
-class GrpcAvailabilityData:
+class GrpcAvailabilityData(GrpcBaseModel):
     """Online/awake state from the gRPC AvailabilityService.
 
     Reflects whether the vehicle's connectivity currently allows fresh data
@@ -287,8 +280,7 @@ class PreCleaningRunningStatus(StrEnumOptional):
     RUNNING_STATUS_PENDING = "Pending"
 
 
-@dataclass(frozen=True)
-class GrpcPreCleaningData:
+class GrpcPreCleaningData(GrpcBaseModel):
     """Cabin air pre-cleaning ("CleanZone") status from the gRPC PreCleaningService."""
 
     running_status: PreCleaningRunningStatus
@@ -301,8 +293,7 @@ class GrpcPreCleaningData:
     timestamp: datetime | None
 
 
-@dataclass(frozen=True)
-class GrpcLocationData:
+class GrpcLocationData(GrpcBaseModel):
     """Last known GPS location from the gRPC DtlInternetService.
 
     Not available through GraphQL at all today. `stale` reflects the
@@ -325,8 +316,7 @@ class GrpcLocationData:
 # --------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class GrpcMyCarsData:
+class GrpcMyCarsData(GrpcBaseModel):
     """Vehicle identity + installed software version from car_information.CarInformation/GetMyCars.
 
     The real response has ~80 more fields per car (capability flags, factory
@@ -344,8 +334,7 @@ class GrpcMyCarsData:
     registration_no: str | None
 
 
-@dataclass(frozen=True)
-class GrpcAmpLimitData:
+class GrpcAmpLimitData(GrpcBaseModel):
     """Charging current limit from the gRPC AmpLimitService.
 
     Structurally identical to GrpcTargetSocData (id/vin/reading/updated_at),
@@ -358,8 +347,7 @@ class GrpcAmpLimitData:
     updated_at: datetime | None
 
 
-@dataclass(frozen=True)
-class GrpcChargeScheduleData:
+class GrpcChargeScheduleData(GrpcBaseModel):
     """Overnight charging window from the gRPC GlobalChargeTimerService.
 
     `start_hour`/`end_hour` are moderate-confidence (0-23, matched a real

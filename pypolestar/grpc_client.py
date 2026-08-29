@@ -17,6 +17,7 @@ import grpc
 import grpc.aio
 import httpx
 
+from .enum import BrakeFluidLevelWarning, EngineCoolantLevelWarning, OilLevelWarning, ServiceWarning
 from .grpc_models import (
     AlarmStatus,
     AvailabilityStatus,
@@ -50,7 +51,6 @@ from .grpc_models import (
     Ventilation,
     WasherFluidLevelWarning,
 )
-from .models import BrakeFluidLevelWarning, EngineCoolantLevelWarning, OilLevelWarning, ServiceWarning
 from .proto import (
     polestar_amplimit_pb2,
     polestar_availability_pb2,

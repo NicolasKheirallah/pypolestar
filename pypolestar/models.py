@@ -1,124 +1,89 @@
-import re
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from enum import StrEnum
-from functools import cached_property
-from typing import Any, Self
+"""Data models for the Polestar API."""
 
+import re
+from datetime import date, datetime, timedelta, timezone
+from functools import cached_property
+from typing import Self
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr
+
+from .enum import (
+    BrakeFluidLevelWarning,
+    ChargingConnectionStatus,
+    ChargingStatus,
+    EngineCoolantLevelWarning,
+    OilLevelWarning,
+    ServiceWarning,
+)
+from .grpc_models import (
+    GrpcAmpLimitData,
+    GrpcAvailabilityData,
+    GrpcBatteryData,
+    GrpcChargeScheduleData,
+    GrpcClimateData,
+    GrpcExteriorData,
+    GrpcHealthData,
+    GrpcLocationData,
+    GrpcMyCarsData,
+    GrpcOdometerData,
+    GrpcPreCleaningData,
+    GrpcTargetSocData,
+)
 from .utils import GqlDict, get_field_name_int, get_field_name_str, get_field_name_timestamp
 
+# Examples: "78 kWh", "78.3 kWh", "78.3 KWH"
+CAPACITY_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:kwh|kWh|KWH)", re.IGNORECASE)
 
-class StrEnumOptional(StrEnum):
-    @classmethod
-    def get(cls, key: Any, default: Self) -> Self:
-        try:
-            return cls[key]
-        except KeyError:
-            return default
+# Examples: "400V", "400 V"
+VOLTAGE_PATTERN = re.compile(r"(\d+)\s*V", re.IGNORECASE)
 
+# Examples: "27 modules", "27 Modules"
+MODULES_PATTERN = re.compile(r"(\d+)\s*modules?", re.IGNORECASE)
 
-class ChargingConnectionStatus(StrEnumOptional):
-    CHARGER_CONNECTION_STATUS_CONNECTED = "Connected"
-    CHARGER_CONNECTION_STATUS_DISCONNECTED = "Disconnected"
-    CHARGER_CONNECTION_STATUS_FAULT = "Fault"
-    CHARGER_CONNECTION_STATUS_UNSPECIFIED = "Unspecified"
+# Examples: "27 cells", "27 Cells"
+CELLS_PATTERN = re.compile(r"(\d+)\s*cells?", re.IGNORECASE)
+
+TORQUE_PATTERN = re.compile(r"(\d+)(?:\s*Nm|\s*N·m|\s*N⋅m)", re.IGNORECASE)
 
 
-class ChargingStatus(StrEnumOptional):
-    CHARGING_STATUS_DONE = "Done"
-    CHARGING_STATUS_IDLE = "Idle"
-    CHARGING_STATUS_CHARGING = "Charging"
-    CHARGING_STATUS_FAULT = "Fault"
-    CHARGING_STATUS_UNSPECIFIED = "Unspecified"
-    CHARGING_STATUS_SCHEDULED = "Scheduled"
-    CHARGING_STATUS_DISCHARGING = "Discharging"
-    CHARGING_STATUS_ERROR = "Error"
-    CHARGING_STATUS_SMART_CHARGING = "Smart Charging"
-    CHARGING_STATUS_SMART_CHARGING_PAUSED = "Smart Charging Paused"
+class CarBaseInformation(BaseModel):
+    """Base class for car information data models."""
+
+    _received_timestamp: datetime = PrivateAttr(default_factory=lambda: datetime.now(tz=timezone.utc))
+
+    model_config = ConfigDict(frozen=True)
+
+    def get_received_timestamp(self) -> datetime:
+        """Return the timestamp when the data was received."""
+        return self._received_timestamp
 
 
-class BrakeFluidLevelWarning(StrEnumOptional):
-    BRAKE_FLUID_LEVEL_WARNING_NO_WARNING = "No Warning"
-    BRAKE_FLUID_LEVEL_WARNING_UNSPECIFIED = "Unspecified"
-    BRAKE_FLUID_LEVEL_WARNING_TOO_LOW = "Too Low"
-    # Only reported by the gRPC HealthService, not the GraphQL health query.
-    BRAKE_FLUID_LEVEL_WARNING_CRITICALLY_LOW = "Critically Low"
-
-
-class EngineCoolantLevelWarning(StrEnumOptional):
-    ENGINE_COOLANT_LEVEL_WARNING_NO_WARNING = "No Warning"
-    ENGINE_COOLANT_LEVEL_WARNING_UNSPECIFIED = "Unspecified"
-    ENGINE_COOLANT_LEVEL_WARNING_TOO_LOW = "Too Low"
-
-
-class OilLevelWarning(StrEnumOptional):
-    OIL_LEVEL_WARNING_NO_WARNING = "No Warning"
-    OIL_LEVEL_WARNING_UNSPECIFIED = "Unspecified"
-    OIL_LEVEL_WARNING_TOO_LOW = "Too Low"
-    OIL_LEVEL_WARNING_TOO_HIGH = "Too High"
-    OIL_LEVEL_WARNING_SERVICE_REQUIRED = "Service Required"
-
-
-class ServiceWarning(StrEnumOptional):
-    SERVICE_WARNING_NO_WARNING = "No Warning"
-    SERVICE_WARNING_UNSPECIFIED = "Unspecified"
-    SERVICE_WARNING_SERVICE_REQUIRED = "Service Required"
-    SERVICE_WARNING_REGULAR_MAINTENANCE_ALMOST_TIME_FOR_SERVICE = "Regular Maintenance Almost Time For Service"
-    SERVICE_WARNING_DISTANCE_DRIVEN_ALMOST_TIME_FOR_SERVICE = "Distance Driven Almost Time For Service"
-    SERVICE_WARNING_REGULAR_MAINTENANCE_TIME_FOR_SERVICE = "Regular Maintenance Time For Service"
-    SERVICE_WARNING_DISTANCE_DRIVEN_TIME_FOR_SERVICE = "Distance Driven Time For Service"
-    SERVICE_WARNING_REGULAR_MAINTENANCE_OVERDUE_FOR_SERVICE = "Regular Maintenance Overdue For Service"
-    SERVICE_WARNING_DISTANCE_DRIVEN_OVERDUE_FOR_SERVICE = "Distance Driven Overdue For Service"
-    # Only reported by the gRPC HealthService, not the GraphQL health query
-    # (combustion/hybrid "engine hours" variants and a generic unknown state).
-    SERVICE_WARNING_UNKNOWN_WARNING = "Unknown Warning"
-    SERVICE_WARNING_ENGINE_HOURS_ALMOST_TIME_FOR_SERVICE = "Engine Hours Almost Time For Service"
-    SERVICE_WARNING_ENGINE_HOURS_TIME_FOR_SERVICE = "Engine Hours Time For Service"
-    SERVICE_WARNING_ENGINE_HOURS_OVERDUE_FOR_SERVICE = "Engine Hours Overdue For Service"
-
-
-@dataclass(frozen=True)
-class CarBaseInformation:
-    _received_timestamp: datetime
-
-
-@dataclass(frozen=True)
-class CarBatteryInformationData:
+class CarBatteryInformationData(BaseModel):
     voltage: int | None
     capacity: int | None
     modules: int | None
     cells: int | None
 
-    # Examples: "78 kWh", "78.3 kWh", "78.3 KWH"
-    _CAPACITY_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:kwh|kWh|KWH)", re.IGNORECASE)
-
-    # Examples: "400V", "400 V"
-    _VOLTAGE_PATTERN = re.compile(r"(\d+)\s*V", re.IGNORECASE)
-
-    # Examples: "27 modules", "27 Modules"
-    _MODULES_PATTERN = re.compile(r"(\d+)\s*modules?", re.IGNORECASE)
-
-    # Examples: "27 cells", "27 Cells"
-    _CELLS_PATTERN = re.compile(r"(\d+)\s*cells?", re.IGNORECASE)
+    model_config = ConfigDict(frozen=True)
 
     @classmethod
     def from_battery_str(cls, battery_information: str) -> Self:
-        if match := cls._CAPACITY_PATTERN.search(battery_information):
-            capacity = int(match.group(1))
+        if match := CAPACITY_PATTERN.search(battery_information):
+            capacity = int(float(match.group(1)))
         else:
             capacity = None
 
-        if match := cls._VOLTAGE_PATTERN.search(battery_information):
+        if match := VOLTAGE_PATTERN.search(battery_information):
             voltage = int(match.group(1))
         else:
             voltage = None
 
-        if match := cls._MODULES_PATTERN.search(battery_information):
+        if match := MODULES_PATTERN.search(battery_information):
             modules = int(match.group(1))
         else:
             modules = None
 
-        if match := cls._CELLS_PATTERN.search(battery_information):
+        if match := CELLS_PATTERN.search(battery_information):
             cells = int(match.group(1))
         else:
             cells = None
@@ -126,7 +91,6 @@ class CarBatteryInformationData:
         return cls(voltage=voltage, capacity=capacity, modules=modules, cells=cells)
 
 
-@dataclass(frozen=True)
 class CarInformationData(CarBaseInformation):
     vin: str | None = None
     internal_vehicle_identifier: str | None = None
@@ -145,15 +109,13 @@ class CarInformationData(CarBaseInformation):
     software_version_timestamp: datetime | None = None
     image_url: str | None = None
 
-    _TORQUE_PATTERN = re.compile(r"(\d+)(?:\s*Nm|\s*N·m|\s*N⋅m)", re.IGNORECASE)
-
     @cached_property
     def battery_information(self) -> CarBatteryInformationData | None:
         return CarBatteryInformationData.from_battery_str(self.battery) if self.battery else None
 
     @cached_property
     def torque_nm(self) -> int | None:
-        if self.torque and (match := self._TORQUE_PATTERN.search(self.torque)):
+        if self.torque and (match := TORQUE_PATTERN.search(self.torque)):
             return int(match.group(1))
         return None
 
@@ -164,7 +126,7 @@ class CarInformationData(CarBaseInformation):
 
         # "Polestar 4" is reported as "Polestar4"
         model_name = get_field_name_str("modelName", data)
-        if match := re.match(r"^([A-Za-z]+)(\d+)$", model_name):
+        if model_name and (match := re.match(r"^([A-Za-z]+)(\d+)$", model_name)):
             model_name = " ".join([match.group(1), match.group(2)])
 
         return cls(
@@ -176,11 +138,9 @@ class CarInformationData(CarBaseInformation):
             pno34=get_field_name_str("pno34", data),
             structure_week=get_field_name_str("structureWeek", data),
             image_url=None,
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
-@dataclass(frozen=True)
 class CarOdometerData(CarBaseInformation):
     average_speed_km_per_hour: int | None
     odometer_meters: int | None
@@ -199,11 +159,9 @@ class CarOdometerData(CarBaseInformation):
             trip_meter_automatic_km=None,
             trip_meter_manual_km=None,
             event_updated_timestamp=get_field_name_timestamp("timestamp/seconds", data),
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
-@dataclass(frozen=True)
 class CarBatteryData(CarBaseInformation):
     average_energy_consumption_kwh_per_100km: float | None
     battery_charge_level_percentage: int | None
@@ -281,11 +239,9 @@ class CarBatteryData(CarBaseInformation):
             estimated_charging_time_to_full_minutes=get_field_name_int("estimatedChargingTimeToFullMinutes", data),
             estimated_distance_to_empty_km=get_field_name_int("estimatedDistanceToEmptyKm", data),
             event_updated_timestamp=get_field_name_timestamp("timestamp/seconds", data),
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
-@dataclass(frozen=True)
 class CarHealthData(CarBaseInformation):
     brake_fluid_level_warning: BrakeFluidLevelWarning
     days_to_service: int | None
@@ -325,11 +281,9 @@ class CarHealthData(CarBaseInformation):
             oil_level_warning=oil_level_warning,
             service_warning=service_warning,
             event_updated_timestamp=get_field_name_timestamp("timestamp/seconds", data),
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
-@dataclass(frozen=True)
 class CarTelematicsData(CarBaseInformation):
     health: CarHealthData | None
     battery: CarBatteryData | None
@@ -355,17 +309,15 @@ class CarTelematicsData(CarBaseInformation):
             health=(CarHealthData.from_dict(health) if isinstance(health, dict) else None),
             battery=(CarBatteryData.from_dict(battery) if isinstance(battery, dict) else None),
             odometer=(CarOdometerData.from_dict(odometer) if isinstance(odometer, dict) else None),
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
 
 
-@dataclass(frozen=True)
-class CarImage:
+class CarImage(BaseModel):
     url: str
     angle: int
+    model_config = ConfigDict(frozen=True)
 
 
-@dataclass(frozen=True)
 class CarImagesData(CarBaseInformation):
     transparent: list[CarImage]
     opaque: list[CarImage]
@@ -390,5 +342,31 @@ class CarImagesData(CarBaseInformation):
             opaque=[
                 CarImage(url=img["url"], angle=img["angle"]) for img in data.get("opaque", []) if isinstance(img, dict)
             ],
-            _received_timestamp=datetime.now(tz=timezone.utc),
         )
+
+
+class CarDataCollection(BaseModel):
+    """Collection of car data from GraphQL and gRPC APIs"""
+
+    # from GraphQL API
+    car_information: CarInformationData | None = None
+    car_telematics: CarTelematicsData | None = None
+    car_images: CarImagesData | None = None
+
+    # from gRPC API
+    battery_data: GrpcBatteryData | None = None
+    target_soc: GrpcTargetSocData | None = None
+
+    # from gRPC API (best-effort; see grpc_models.py for confidence notes)
+    grpc_exterior: GrpcExteriorData | None = None
+    grpc_health: GrpcHealthData | None = None
+    grpc_odometer: GrpcOdometerData | None = None
+    grpc_climate: GrpcClimateData | None = None
+    grpc_availability: GrpcAvailabilityData | None = None
+    grpc_precleaning: GrpcPreCleaningData | None = None
+    grpc_location: GrpcLocationData | None = None
+    grpc_mycars: GrpcMyCarsData | None = None
+    grpc_amp_limit: GrpcAmpLimitData | None = None
+    grpc_charge_schedule: GrpcChargeScheduleData | None = None
+
+    model_config = ConfigDict(frozen=True)

@@ -4,12 +4,12 @@ import hashlib
 import logging
 import os
 import re
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Self
+from json import JSONDecodeError
 from urllib.parse import urljoin, urlparse
 
 import httpx
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .const import (
     HTTPX_TIMEOUT,
@@ -29,19 +29,12 @@ def b64urlencode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
 
-@dataclass(frozen=True)
-class OidcConfiguration:
+class OidcConfiguration(BaseModel):
     issuer: str
     token_endpoint: str
     authorization_endpoint: str
 
-    @classmethod
-    def from_dict(cls, data: dict[str, str]) -> Self:
-        return cls(
-            issuer=data["issuer"],
-            token_endpoint=data["token_endpoint"],
-            authorization_endpoint=data["authorization_endpoint"],
-        )
+    model_config = ConfigDict(frozen=True)
 
 
 class PolestarAuth:
@@ -112,7 +105,10 @@ class PolestarAuth:
             raise PolestarAuthUnavailable(
                 message="Unable to get OIDC configuration", error_code=exc.response.status_code
             ) from exc
-        self.oidc_configuration = OidcConfiguration.from_dict(result.json())
+        try:
+            self.oidc_configuration = OidcConfiguration.model_validate(result.json())
+        except (ValidationError, JSONDecodeError) as exc:
+            raise PolestarAuthException("Invalid OIDC configuration") from exc
 
     def need_token_refresh(self) -> bool:
         """Return True if token needs refresh"""

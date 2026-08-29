@@ -38,9 +38,9 @@ from pypolestar.grpc_models import (
     HeatingIntensity,
     LockStatus,
     OpenStatus,
+    ServiceWarning,
     TyrePressureWarning,
 )
-from pypolestar.models import ServiceWarning
 from pypolestar.proto import (
     polestar_amplimit_pb2,
     polestar_availability_pb2,
@@ -456,3 +456,46 @@ def test_parse_charge_schedule_no_timer():
     data = _parse_charge_schedule(response)
     assert data.start_hour is None
     assert data.end_hour is None
+
+
+# --------------------------------------------------------------------------
+# CarDataCollection carries every gRPC telemetry model, so PolestarApi.get_data()
+# (and cli.py's --dump, which json-serializes it) exposes them all in one place.
+# --------------------------------------------------------------------------
+
+# CarDataCollection field name -> parsed-from-empty instance of the model it holds.
+GRPC_MODELS_BY_COLLECTION_FIELD = {
+    "battery_data": _parse_battery(polestar_battery_pb2.Battery()),
+    "target_soc": _parse_target_soc(polestar_target_soc_pb2.GetTargetSocResponse()),
+    "grpc_exterior": _parse_exterior(polestar_exterior_pb2.Exterior()),
+    "grpc_health": _parse_health(polestar_health_pb2.Health()),
+    "grpc_odometer": _parse_odometer(polestar_odometer_pb2.Odometer()),
+    "grpc_climate": _parse_climate(polestar_parkingclimatization_pb2.ParkingClimatization()),
+    "grpc_availability": _parse_availability(polestar_availability_pb2.Availability()),
+    "grpc_precleaning": _parse_precleaning(polestar_precleaning_pb2.PreCleaning()),
+    "grpc_location": _parse_location(polestar_location_pb2.LastParkedLocation()),
+    "grpc_mycars": _parse_mycars(polestar_mycars_pb2.MyCarEntry()),
+    "grpc_amp_limit": _parse_amp_limit(polestar_amplimit_pb2.GetAmpLimitResponse()),
+    "grpc_charge_schedule": _parse_charge_schedule(polestar_chargetimer_pb2.GetGlobalChargeTimerStreamResponse()),
+}
+
+
+def test_car_data_collection_round_trips_every_grpc_model_to_json():
+    import json
+
+    from pypolestar.models import CarDataCollection
+
+    models = GRPC_MODELS_BY_COLLECTION_FIELD
+
+    # every gRPC model has a slot on the collection ...
+    assert set(models).issubset(CarDataCollection.model_fields)
+
+    # ... pydantic accepts each one in its slot and keeps the instance intact ...
+    collection = CarDataCollection(**models)
+    for name, model in models.items():
+        assert getattr(collection, name) is model
+
+    # ... and the whole thing json-serializes (this is what cli.py --dump does)
+    dumped = collection.model_dump(mode="json", exclude_none=True)
+    assert set(models).issubset(dumped)
+    json.dumps(dumped)

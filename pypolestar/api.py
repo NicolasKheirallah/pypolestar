@@ -61,7 +61,7 @@ from .grpc_models import (
     GrpcPreCleaningData,
     GrpcTargetSocData,
 )
-from .models import CarImagesData, CarInformationData, CarTelematicsData
+from .models import CarDataCollection, CarImagesData, CarInformationData, CarTelematicsData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -160,6 +160,30 @@ class PolestarApi:
     def get_available_vins(self) -> list[str]:
         """Get list of all available VINs"""
         return list(self.available_vins)
+
+    def get_data(self, vin: str) -> CarDataCollection:
+        """Get the data collection for the specified VIN. Raises KeyError if VIN not available."""
+
+        if vin not in self.available_vins:
+            raise KeyError(f"VIN {vin} not available")
+
+        return CarDataCollection(
+            car_information=self.get_car_information(vin),
+            car_telematics=self.get_car_telematics(vin),
+            car_images=self.get_car_images(vin),
+            battery_data=self.get_grpc_battery(vin),
+            target_soc=self.get_grpc_target_soc(vin),
+            grpc_exterior=self.get_grpc_exterior(vin),
+            grpc_health=self.get_grpc_health(vin),
+            grpc_odometer=self.get_grpc_odometer(vin),
+            grpc_climate=self.get_grpc_climate(vin),
+            grpc_availability=self.get_grpc_availability(vin),
+            grpc_precleaning=self.get_grpc_precleaning(vin),
+            grpc_location=self.get_grpc_location(vin),
+            grpc_mycars=self.get_grpc_mycars(vin),
+            grpc_amp_limit=self.get_grpc_amp_limit(vin),
+            grpc_charge_schedule=self.get_grpc_charge_schedule(vin),
+        )
 
     def get_car_information(self, vin: str) -> CarInformationData | None:
         """
