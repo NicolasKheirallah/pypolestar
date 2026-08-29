@@ -1,28 +1,25 @@
 """Data models for the Polestar gRPC API."""
 
-from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
-from .models import ChargingConnectionStatus, ChargingStatus, StrEnumOptional
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
-
-class ChargingType(StrEnumOptional):
-    CHARGING_TYPE_UNSPECIFIED = "Unspecified"
-    CHARGING_TYPE_NONE = "None"
-    CHARGING_TYPE_AC = "AC"
-    CHARGING_TYPE_DC = "DC"
-    CHARGING_TYPE_WIRELESS = "Wireless"
+from .enum import ChargeTargetLevelSettingType, ChargingConnectionStatus, ChargingStatus, ChargingType
 
 
-class ChargeTargetLevelSettingType(StrEnumOptional):
-    CHARGE_TARGET_LEVEL_SETTING_TYPE_UNSPECIFIED = "Unspecified"
-    DAILY = "Daily"
-    LONG_TRIP = "Long Trip"
-    CUSTOM = "Custom"
+class GrpcBaseModel(BaseModel):
+    """Base class for gRPC data models."""
+
+    _received_timestamp: datetime = PrivateAttr(default_factory=lambda: datetime.now(tz=timezone.utc))
+
+    model_config = ConfigDict(frozen=True)
+
+    def get_received_timestamp(self) -> datetime:
+        """Return the timestamp when the data was received."""
+        return self._received_timestamp
 
 
-@dataclass(frozen=True)
-class GrpcBatteryData:
+class GrpcBatteryData(GrpcBaseModel):
     """Battery data from the gRPC API (richer than GraphQL)."""
 
     charger_connection_status: ChargingConnectionStatus
@@ -40,8 +37,7 @@ class GrpcBatteryData:
     timestamp: datetime | None
 
 
-@dataclass(frozen=True)
-class GrpcTargetSocData:
+class GrpcTargetSocData(GrpcBaseModel):
     """Target SOC (charge limit) from the gRPC API."""
 
     battery_charge_target_level: int | None

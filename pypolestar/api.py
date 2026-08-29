@@ -38,7 +38,7 @@ from .graphql import (
 )
 from .grpc_client import PolestarGrpcClient
 from .grpc_models import GrpcBatteryData, GrpcTargetSocData
-from .models import CarImagesData, CarInformationData, CarTelematicsData
+from .models import CarDataCollection, CarImagesData, CarInformationData, CarTelematicsData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -137,6 +137,20 @@ class PolestarApi:
     def get_available_vins(self) -> list[str]:
         """Get list of all available VINs"""
         return list(self.available_vins)
+
+    def get_data(self, vin: str) -> CarDataCollection:
+        """Get the data collection for the specified VIN. Raises KeyError if VIN not available."""
+
+        if vin not in self.available_vins:
+            raise KeyError(f"VIN {vin} not available")
+
+        return CarDataCollection(
+            car_information=self.get_car_information(vin),
+            car_telematics=self.get_car_telematics(vin),
+            car_images=self.get_car_images(vin),
+            battery_data=self.get_grpc_battery(vin),
+            target_soc=self.get_grpc_target_soc(vin),
+        )
 
     def get_car_information(self, vin: str) -> CarInformationData | None:
         """

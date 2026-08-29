@@ -133,7 +133,6 @@ def test_car_information_data_invalid():
 
 def test_car_battery_data_rate():
     data = CarBatteryData(
-        _received_timestamp=datetime.now(tz=timezone.utc),
         average_energy_consumption_kwh_per_100km=None,
         battery_charge_level_percentage=55,
         charger_connection_status=ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_CONNECTED,
@@ -156,7 +155,6 @@ def test_car_battery_data_rate():
 def test_estimated_fully_charged_requires_charging():
     def battery(charging_status):
         return CarBatteryData(
-            _received_timestamp=datetime.now(tz=timezone.utc),
             average_energy_consumption_kwh_per_100km=None,
             battery_charge_level_percentage=55,
             charger_connection_status=ChargingConnectionStatus.CHARGER_CONNECTION_STATUS_CONNECTED,
